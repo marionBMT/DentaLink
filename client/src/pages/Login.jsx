@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom'; // Added Link
 import api from '../api/axiosClient';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  // Changed from email to identifier
+  const [identifier, setIdentifier] = useState(''); 
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   
-  // OTP States
   const [showOtp, setShowOtp] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpMessage, setOtpMessage] = useState('');
@@ -18,13 +18,14 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const res = await api.post('/auth/login', { email, password });
+      // Backend must accept 'identifier' and check both email and username
+      const res = await api.post('/auth/login', { identifier, password });
       if (res.data.requireOtp) {
         setShowOtp(true);
         setOtpMessage('A 6-digit code has been sent to your email.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password');
+      setError(err.response?.data?.message || 'Invalid credentials');
     }
   };
 
@@ -32,7 +33,7 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const res = await api.post('/auth/verify-otp', { email, otp: otpCode });
+      const res = await api.post('/auth/verify-otp', { identifier, otp: otpCode });
       
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('role', res.data.role);
@@ -59,16 +60,20 @@ export default function Login() {
         {!showOtp ? (
           <form onSubmit={handleLogin} className="card p-4 shadow-sm">
             <div className="mb-3">
-              <label className="form-label">Email</label>
-              <input type="email" className="form-control" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label className="form-label">Username or Email</label>
+              <input type="text" className="form-control" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
             </div>
             <div className="mb-3">
               <label className="form-label">Password</label>
               <input type="password" className="form-control" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
+            <div className="mb-3 text-end">
+              <Link to="/forgot-password" className="text-decoration-none small">Forgot Password?</Link>
+            </div>
             <button type="submit" className="btn btn-primary w-100">Log In</button>
           </form>
         ) : (
+          /* OTP Form Remains Unchanged */
           <form onSubmit={handleVerifyOtp} className="card p-4 shadow-sm border-primary">
             <h5 className="text-center mb-3">Two-Step Verification</h5>
             <div className="mb-3">

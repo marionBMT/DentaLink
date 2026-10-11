@@ -7,6 +7,7 @@ const appointmentSchema = new mongoose.Schema({
     required: true
   },
   serviceType: { type: String, required: true },
+  dentistName: { type: String, required: true },
   requestedDate: { type: String, required: true },
   requestedTime: { type: String, required: true },
   status: {
@@ -14,9 +15,9 @@ const appointmentSchema = new mongoose.Schema({
     enum: [
       'Pending_Admin_Approval', 
       'Admin_Counter_Offer', 
-      'Patient_Counter_Offer', // NEW
+      'Patient_Counter_Offer', 
       'Confirmed', 
-      'Cancellation_Requested', // NEW
+      'Cancellation_Requested', 
       'Rejected', 
       'Cancelled'
     ],
@@ -25,7 +26,8 @@ const appointmentSchema = new mongoose.Schema({
   adminSuggestedDate: { type: String, default: null },
   adminSuggestedTime: { type: String, default: null },
   adminRemarks: { type: String, default: '' },
-  patientRemarks: { type: String, default: '' } // NEW
+  patientRemarks: { type: String, default: '' },
+  isArchived: { type: Boolean, default: false } // NEW: Archive flag
 }, { timestamps: true });
 
 module.exports = mongoose.model('Appointment', appointmentSchema);

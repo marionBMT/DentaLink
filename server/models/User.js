@@ -12,8 +12,11 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['admin', 'patient'], default: 'patient' },
+  contactNumber: { type: String, default: '' },
+  address: { type: String, default: '' },
   otp: { type: String, default: null },
-  otpExpires: { type: Date, default: null }
+  otpExpires: { type: Date, default: null },
+  isArchived: { type: Boolean, default: false } // NEW: Archive flag
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

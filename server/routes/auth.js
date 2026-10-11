@@ -18,13 +18,11 @@ router.post('/register', async (req, res) => {
     try {
         const { username, name, email, password } = req.body;
         
-        // 1. Check specifically for existing email
         const existingEmail = await User.findOne({ email });
         if (existingEmail) {
             return res.status(400).json({ message: 'Email is already used. Please log in or use another email.' });
         }
 
-        // 2. Check specifically for existing username
         const existingUsername = await User.findOne({ username });
         if (existingUsername) {
             return res.status(400).json({ message: 'Username is already taken.' });
@@ -42,28 +40,28 @@ router.post('/register', async (req, res) => {
 // --- STEP 1: LOGIN (Check Password & Send OTP) ---
 router.post('/login', async (req, res) => {
     try {
-        // Change from email to identifier
         const { identifier, password } = req.body;
 
-        // Search for user by matching identifier to either email OR username
         const user = await User.findOne({ 
             $or: [{ email: identifier }, { username: identifier }] 
         });
         
         if (!user) return res.status(401).json({ message: 'Invalid credentials.' });
 
+        // --- NEW: BLOCK ARCHIVED USERS FROM LOGGING IN ---
+        if (user.isArchived) {
+            return res.status(403).json({ message: 'Your account has been archived. Please check your email or contact administration.' });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Invalid credentials.' });
 
-        // Generate 6-digit OTP
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         
-        // Save to database with 10-minute expiration
         user.otp = otpCode;
         user.otpExpires = Date.now() + 10 * 60 * 1000; 
         await user.save();
 
-        // Send Email (always to the user's registered email)
         await transporter.sendMail({
             from: process.env.EMAIL_USER,
             to: user.email,
@@ -80,10 +78,8 @@ router.post('/login', async (req, res) => {
 // --- STEP 2: VERIFY OTP & LOGIN ---
 router.post('/verify-otp', async (req, res) => {
     try {
-        // Change from email to identifier
         const { identifier, otp } = req.body;
 
-        // Search for user by matching identifier to either email OR username
         const user = await User.findOne({ 
             $or: [{ email: identifier }, { username: identifier }] 
         });
@@ -92,7 +88,6 @@ router.post('/verify-otp', async (req, res) => {
             return res.status(400).json({ message: 'Invalid or expired OTP code.' });
         }
 
-        // Clear the OTP fields now that it is used
         user.otp = null;
         user.otpExpires = null;
         await user.save();
@@ -159,7 +154,6 @@ router.post('/reset-password', async (req, res) => {
 
         if (!user) return res.status(404).json({ message: 'User not found.' });
 
-        // 1. Check if the new password matches the current password
         const isSamePassword = await bcrypt.compare(newPassword, user.password);
         if (isSamePassword) {
             return res.status(400).json({ message: 'Cannot change password with the current password.' });

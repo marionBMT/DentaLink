@@ -3,7 +3,9 @@ import api from '../api/axiosClient';
 
 export default function PatientDashboard() {
   const [appointments, setAppointments] = useState([]);
-  const [serviceType, setServiceType] = useState('General Checkup');
+  const [availableServices, setAvailableServices] = useState([]);
+  const [serviceType, setServiceType] = useState('');
+  const [dentistName, setDentistName] = useState('');
   const [requestedDate, setRequestedDate] = useState('');
   const [requestedTime, setRequestedTime] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -11,6 +13,9 @@ export default function PatientDashboard() {
   const [actionId, setActionId] = useState(null);
   const [actionType, setActionType] = useState(''); 
   const [patientRemark, setPatientRemark] = useState('');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const appointmentsPerPage = 4;
 
   // Get current date in Manila time for the date picker minimum
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -29,6 +34,15 @@ export default function PatientDashboard() {
   };
   const timeSlots = generateTimeSlots();
 
+  const formatTimeFriendly = (timeString) => {
+    if (!timeString) return '';
+    const [hour, minute] = timeString.split(':');
+    let h = parseInt(hour, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12; 
+    return `${timeString} (${h}:${minute} ${ampm})`;
+  };
+
   const loadAppointments = async () => {
     try {
       const res = await api.get('/appointments');
@@ -38,16 +52,44 @@ export default function PatientDashboard() {
     }
   };
 
-  useEffect(() => { loadAppointments(); }, []);
+  const loadServices = async () => {
+    try {
+      const res = await api.get('/services');
+      setAvailableServices(res.data);
+      if (res.data.length > 0) setServiceType(res.data[0].name);
+    } catch (err) { console.error("Failed to load services", err); }
+  };
+
+  useEffect(() => { 
+    loadAppointments(); 
+    loadServices(); 
+  }, []);
+
+  const selectedServiceObj = availableServices.find(s => s.name === serviceType);
+  const availableDentists = selectedServiceObj ? selectedServiceObj.dentists : [];
+
+  useEffect(() => {
+    if (availableDentists.length > 0) {
+      setDentistName(availableDentists[0].name);
+    } else {
+      setDentistName('');
+    }
+  }, [serviceType, availableDentists]);
 
   const handleBook = async (e) => {
     e.preventDefault();
     setMessage({ type: '', text: '' });
+    if (!dentistName) {
+      setMessage({ type: 'danger', text: 'No dentist available for this service.' });
+      return;
+    }
+
     try {
-      await api.post('/appointments', { serviceType, requestedDate, requestedTime });
+      await api.post('/appointments', { serviceType, dentistName, requestedDate, requestedTime });
       setMessage({ type: 'success', text: 'Appointment requested successfully! Waiting for admin approval.' });
       setRequestedDate('');
       setRequestedTime('');
+      setCurrentPage(1);
       loadAppointments();
     } catch (err) {
       setMessage({ type: 'danger', text: err.response?.data?.message || 'Failed to book appointment.' });
@@ -88,6 +130,11 @@ export default function PatientDashboard() {
     ['Pending_Admin_Approval', 'Patient_Counter_Offer', 'Cancellation_Requested'].includes(appt.status)
   );
 
+  const indexOfLastAppt = currentPage * appointmentsPerPage;
+  const indexOfFirstAppt = indexOfLastAppt - appointmentsPerPage;
+  const currentAppointments = appointments.slice(indexOfFirstAppt, indexOfLastAppt);
+  const totalPages = Math.ceil(appointments.length / appointmentsPerPage);
+
   return (
     <div className="row mt-4">
       <div className="col-md-5 mb-4">
@@ -98,11 +145,23 @@ export default function PatientDashboard() {
           <form onSubmit={handleBook}>
             <div className="mb-3">
               <label className="form-label">Service Required</label>
-              <select className="form-select" value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
-                <option value="General Checkup">General Checkup</option>
-                <option value="Teeth Cleaning">Teeth Cleaning</option>
-                <option value="Tooth Extraction">Tooth Extraction</option>
-                <option value="Consultation">Consultation</option>
+              <select className="form-select" value={serviceType} onChange={(e) => setServiceType(e.target.value)} disabled={hasPending}>
+                {availableServices.length === 0 && <option value="">Loading services...</option>}
+                {availableServices.map(s => (
+                  <option key={s._id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Select Dentist</label>
+              <select className="form-select" value={dentistName} onChange={(e) => setDentistName(e.target.value)} required disabled={hasPending || availableDentists.length === 0}>
+                {availableDentists.length === 0 ? (
+                  <option value="" disabled>No dentists assigned</option>
+                ) : (
+                  availableDentists.map(d => (
+                    <option key={d._id} value={d.name}>{d.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div className="mb-3">
@@ -119,7 +178,7 @@ export default function PatientDashboard() {
                 ))}
               </select>
             </div>
-            <button type="submit" className="btn btn-primary w-100" disabled={hasPending}>
+            <button type="submit" className="btn btn-primary w-100" disabled={hasPending || availableServices.length === 0}>
               {hasPending ? 'Action Pending Admin Review' : 'Submit Request'}
             </button>
           </form>
@@ -132,10 +191,12 @@ export default function PatientDashboard() {
           <p className="text-muted">You have no appointments yet.</p>
         ) : (
           <div className="list-group shadow-sm">
-            {appointments.map((appt) => (
+            {currentAppointments.map((appt) => (
               <div key={appt._id} className="list-group-item p-3 mb-2 border rounded">
                 <div className="d-flex justify-content-between align-items-center mb-2">
-                  <h5 className="mb-0 text-primary">{appt.serviceType}</h5>
+                  <h5 className="mb-0 text-primary">
+                    {appt.serviceType} <span className="text-dark fw-normal small">- {appt.dentistName}</span>
+                  </h5>
                   <span className={`badge ${
                     appt.status === 'Confirmed' ? 'bg-success' : 
                     appt.status.includes('Counter') ? 'bg-warning text-dark' : 
@@ -148,7 +209,7 @@ export default function PatientDashboard() {
                 {appt.status === 'Admin_Counter_Offer' ? (
                   <div className="alert alert-warning p-2 mt-2 mb-0">
                     <strong>Admin suggested a new time:</strong><br />
-                    Date: {appt.adminSuggestedDate} | Time: {appt.adminSuggestedTime}<br />
+                    Date: {appt.adminSuggestedDate} | Time: {formatTimeFriendly(appt.adminSuggestedTime)}<br />
                     <small className="mb-2 d-block">Remarks: {appt.adminRemarks}</small>
                     
                     {actionId !== appt._id && (
@@ -161,7 +222,7 @@ export default function PatientDashboard() {
                   </div>
                 ) : (
                   <p className="mb-2 text-muted">
-                    Requested for: <strong>{appt.requestedDate}</strong> at <strong>{appt.requestedTime}</strong>
+                    Requested for: <strong>{appt.requestedDate}</strong> at <strong>{formatTimeFriendly(appt.requestedTime)}</strong>
                   </p>
                 )}
 
@@ -178,7 +239,7 @@ export default function PatientDashboard() {
                 {appt.status === 'Admin_Counter_Offer' && (
                   <div className="alert alert-warning p-2 mt-2 mb-2">
                     <small>
-                      <strong>Counter Offer:</strong> {appt.adminSuggestedDate} at {appt.adminSuggestedTime}
+                      <strong>Counter Offer:</strong> {appt.adminSuggestedDate} at {formatTimeFriendly(appt.adminSuggestedTime)}
                     </small>
                   </div>
                 )}
@@ -207,7 +268,25 @@ export default function PatientDashboard() {
                 )}
               </div>
             ))}
+            {totalPages > 1 && (
+              <nav className="mt-4">
+                <ul className="pagination justify-content-center">
+                  <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                    <button onClick={() => setCurrentPage(currentPage - 1)} className="page-link">Previous</button>
+                  </li>
+                  {[...Array(totalPages)].map((_, i) => (
+                    <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                      <button onClick={() => setCurrentPage(i + 1)} className="page-link">{i + 1}</button>
+                    </li>
+                  ))}
+                  <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                    <button onClick={() => setCurrentPage(currentPage + 1)} className="page-link">Next</button>
+                  </li>
+                </ul>
+              </nav>
+            )}
           </div>
+          
         )}
       </div>
     </div>

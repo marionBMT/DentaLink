@@ -19,6 +19,8 @@ app.use('/api/auth', authRoutes);
 
 app.use('/api/appointments', appointmentRoutes);
 
+app.use('/api/services', require('./routes/services'));
+
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('MongoDB Connected to DentaLink DB'))
     .catch(err => console.log('Connection error', err.message));

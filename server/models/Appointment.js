@@ -27,6 +27,7 @@ const appointmentSchema = new mongoose.Schema({
   adminSuggestedTime: { type: String, default: null },
   adminRemarks: { type: String, default: '' },
   patientRemarks: { type: String, default: '' },
+  cancellationProofUrl: { type: String, default: '' },
   isArchived: { type: Boolean, default: false } // NEW: Archive flag
 }, { timestamps: true });
 

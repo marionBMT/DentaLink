@@ -3,6 +3,7 @@ const nodemailer = require('nodemailer');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User'); // Required to fetch admin details
 const { verifyToken, isAdmin } = require('../middleware/authMiddleware');
+const { upload } = require('../config/cloudinary');
 
 // Setup Nodemailer Transporter
 const transporter = nodemailer.createTransport({
@@ -70,8 +71,11 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // 3. UPDATE APPOINTMENT (Admin Approves, Rejects, or Counters)
-router.put('/:id', verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, upload.single('cancellationProof'), async (req, res) => {
     try {
+        if (req.file) {
+            req.body.cancellationProofUrl = req.file.path;
+        }
         const updatedAppt = await Appointment.findByIdAndUpdate(
             req.params.id, 
             req.body, 
@@ -80,7 +84,7 @@ router.put('/:id', verifyToken, async (req, res) => {
 
         if (!updatedAppt) return res.status(404).json({ message: 'Appointment not found' });
 
-        // If the action was performed by an admin, send an email notification
+        // --- 1. ADMIN ACTIONS EMAIL BLOCK ---
         if (req.user.role === 'admin' && updatedAppt.patient && updatedAppt.patient.email) {
             const adminUser = await User.findById(req.user.id);
             let subject = '';
@@ -94,22 +98,42 @@ router.put('/:id', verifyToken, async (req, res) => {
             `;
 
             if (updatedAppt.status === 'Confirmed') {
-                subject = 'DentaLink - Appointment Confirmed!';
-                htmlContent = `
-                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-                        <h2 style="color: #28a745;">Appointment Confirmed</h2>
-                        <p>Hello <strong>${updatedAppt.patient.name}</strong>,</p>
-                        <p>Your appointment for <strong>${updatedAppt.serviceType}</strong> has been officially confirmed by <strong>${adminUser.name}</strong>.</p>
-                        <div style="background-color: #f8f9fa; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0;">
-                            <p style="margin: 0 0 10px 0;"><strong>Date:</strong> ${updatedAppt.requestedDate}</p>
-                            <p style="margin: 0 0 10px 0;"><strong>Time:</strong> ${formatTimeFriendly(updatedAppt.requestedTime)}</p>
-                            <p style="margin: 0;"><strong>Assigned Dentist:</strong> ${updatedAppt.dentistName}</p>
+                // If adminRemarks is present, this was a "Keep Appointment" action
+                if (req.body.adminRemarks) {
+                    subject = 'DentaLink - Appointment Kept (Cancellation Declined)';
+                    htmlContent = `
+                        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                            <h2 style="color: #17a2b8;">Appointment Maintained</h2>
+                            <p>Hello <strong>${updatedAppt.patient.name}</strong>,</p>
+                            <p>An administrator (<strong>${adminUser.name}</strong>) has reviewed your request to cancel the appointment for <strong>${updatedAppt.serviceType}</strong>, but the appointment will be kept as scheduled.</p>
+                            <div style="background-color: #f8f9fa; border-left: 4px solid #17a2b8; padding: 15px; margin: 20px 0;">
+                                <p style="margin: 0 0 10px 0;"><strong>Admin Reason:</strong> ${updatedAppt.adminRemarks}</p>
+                                <p style="margin: 0 0 10px 0;"><strong>Date:</strong> ${updatedAppt.requestedDate}</p>
+                                <p style="margin: 0;"><strong>Time:</strong> ${formatTimeFriendly(updatedAppt.requestedTime)}</p>
+                            </div>
+                            <p>Please make sure to attend, or contact the clinic directly if you have immediate concerns.</p>
+                            ${commonFooter}
                         </div>
-                        <p>You may now proceed to the clinic at your scheduled time. If you have any immediate concerns, please contact the admin who confirmed your appointment.</p>
-                        ${commonFooter}
-                    </div>
-                `;
-            } else if (updatedAppt.status === 'Admin_Counter_Offer') {
+                    `;
+                } else {
+                    // Otherwise, it was a standard initial confirmation
+                    subject = 'DentaLink - Appointment Confirmed!';
+                    htmlContent = `
+                        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                            <h2 style="color: #28a745;">Appointment Confirmed</h2>
+                            <p>Hello <strong>${updatedAppt.patient.name}</strong>,</p>
+                            <p>Your appointment for <strong>${updatedAppt.serviceType}</strong> has been officially confirmed by <strong>${adminUser.name}</strong>.</p>
+                            <div style="background-color: #f8f9fa; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0;">
+                                <p style="margin: 0 0 10px 0;"><strong>Date:</strong> ${updatedAppt.requestedDate}</p>
+                                <p style="margin: 0 0 10px 0;"><strong>Time:</strong> ${formatTimeFriendly(updatedAppt.requestedTime)}</p>
+                                <p style="margin: 0;"><strong>Assigned Dentist:</strong> ${updatedAppt.dentistName}</p>
+                            </div>
+                            <p>You may now proceed to the clinic at your scheduled time. If you have any immediate concerns, please contact the admin who confirmed your appointment.</p>
+                            ${commonFooter}
+                        </div>
+                    `;
+                }
+                } else if (updatedAppt.status === 'Admin_Counter_Offer') {
                 subject = 'DentaLink - New Schedule Suggestion';
                 htmlContent = `
                     <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
@@ -139,9 +163,19 @@ router.put('/:id', verifyToken, async (req, res) => {
                         ${commonFooter}
                     </div>
                 `;
+            } else if (updatedAppt.status === 'Cancelled') {
+                subject = 'DentaLink - Cancellation Approved';
+                htmlContent = `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                        <h2 style="color: #6c757d;">Appointment Cancellation Approved</h2>
+                        <p>Hello <strong>${updatedAppt.patient.name}</strong>,</p>
+                        <p>Your request to cancel the appointment for <strong>${updatedAppt.serviceType}</strong> on <strong>${updatedAppt.requestedDate}</strong> has been approved and processed by <strong>${adminUser.name}</strong>.</p>
+                        <p>Your schedule has been cleared. If you need to book a new appointment in the future, please log in to your dashboard.</p>
+                        ${commonFooter}
+                    </div>
+                `;
             }
 
-            // Only send if a subject was set (meaning one of the above 3 actions occurred)
             if (subject) {
                 const mailOptions = {
                     from: process.env.EMAIL_USER,
@@ -149,9 +183,38 @@ router.put('/:id', verifyToken, async (req, res) => {
                     subject: subject,
                     html: htmlContent
                 };
-                // Fire and forget the email so the UI doesn't hang waiting for Google's SMTP
                 transporter.sendMail(mailOptions).catch(err => console.error("Email send failed:", err));
             }
+        }
+
+        // --- 2. PATIENT ACTIONS EMAIL BLOCK (Moved outside the admin check) ---
+        if (req.user.role === 'patient' && req.body.status === 'Confirmed' && updatedAppt.patient && updatedAppt.patient.email) {
+            const patientSubject = 'DentaLink - Appointment Confirmed!';
+            const patientHtml = `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="color: #28a745;">Appointment Confirmed</h2>
+                    <p>Hello <strong>${updatedAppt.patient.name}</strong>,</p>
+                    <p>You have successfully accepted the new schedule for your <strong>${updatedAppt.serviceType}</strong> appointment.</p>
+                    <div style="background-color: #f8f9fa; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0;">
+                        <p style="margin: 0 0 10px 0;"><strong>Final Date:</strong> ${updatedAppt.requestedDate}</p>
+                        <p style="margin: 0 0 10px 0;"><strong>Final Time:</strong> ${formatTimeFriendly(updatedAppt.requestedTime)}</p>
+                        <p style="margin: 0;"><strong>Assigned Dentist:</strong> ${updatedAppt.dentistName}</p>
+                    </div>
+                    <p>Your appointment is now officially locked in. You may proceed to the clinic at your scheduled time.</p>
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                        <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #777;">Regards,<br><strong>DentaLink Administration</strong></p>
+                    </div>
+                </div>
+            `;
+
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: updatedAppt.patient.email,
+                subject: patientSubject,
+                html: patientHtml
+            };
+            
+            transporter.sendMail(mailOptions).catch(err => console.error("Email send failed:", err));
         }
 
         res.json(updatedAppt);

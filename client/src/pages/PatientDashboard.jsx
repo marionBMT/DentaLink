@@ -14,6 +14,9 @@ export default function PatientDashboard() {
   const [actionType, setActionType] = useState(''); 
   const [patientRemark, setPatientRemark] = useState('');
 
+  const [cancelFile, setCancelFile] = useState(null);
+  const [fileError, setFileError] = useState('');
+
   const [currentPage, setCurrentPage] = useState(1);
   const appointmentsPerPage = 4;
 
@@ -115,13 +118,49 @@ export default function PatientDashboard() {
     } catch (err) { console.error("Failed to cancel", err); }
   };
 
+  const handleFileChange = (e) => {
+    setFileError(''); // Clear previous errors
+    const file = e.target.files[0];
+    
+    if (!file) {
+      setCancelFile(null);
+      return;
+    }
+
+    // Check if file is larger than 5MB (5 * 1024 * 1024 bytes)
+    if (file.size > 5 * 1024 * 1024) {
+      setFileError('File is too large! Maximum allowed size is 5MB.');
+      setCancelFile(null);
+      e.target.value = null; // Clear the file input
+      return;
+    }
+
+    setCancelFile(file);
+  };
+
   const submitPatientAction = async (e, id) => {
     e.preventDefault();
     try {
       const newStatus = actionType === 'cancel' ? 'Cancellation_Requested' : 'Patient_Counter_Offer';
-      await api.put(`/appointments/${id}`, { status: newStatus, patientRemarks: patientRemark });
+      
+      // If a file is attached, we must send it as FormData
+      if (actionType === 'cancel' && cancelFile) {
+        const formData = new FormData();
+        formData.append('status', newStatus);
+        formData.append('patientRemarks', patientRemark);
+        formData.append('cancellationProof', cancelFile); // Matches our backend multer name
+
+        await api.put(`/appointments/${id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        // Standard text-only submission
+        await api.put(`/appointments/${id}`, { status: newStatus, patientRemarks: patientRemark });
+      }
+
       setActionId(null);
       setPatientRemark('');
+      setCancelFile(null); // Clear the file state
       loadAppointments();
     } catch (err) { console.error("Failed to submit action", err); }
   };
@@ -230,11 +269,31 @@ export default function PatientDashboard() {
                 {appt.patientRemarks && (
                   <div className="alert alert-info p-2 mt-2 mb-2"><small><strong>My Message:</strong> {appt.patientRemarks}</small></div>
                 )}
+
+                {/* NEW: Show Patient's Uploaded Proof */}
+                {appt.cancellationProofUrl && (
+                  <div className="mb-2">
+                    <a 
+                      href={appt.cancellationProofUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="btn btn-sm btn-outline-info fw-bold"
+                    >
+                      View Attached Proof
+                    </a>
+                  </div>
+                )}
                 
                 {/* Show Admin Rejection Reason */}
                 {appt.status === 'Rejected' && appt.adminRemarks && (
                   <div className="alert alert-danger p-2 mt-2 mb-2"><small><strong>Rejection Reason:</strong> {appt.adminRemarks}</small></div>
                 )}
+
+                {/* NEW: Show Admin Reason for Keeping Appointment */}
+                {appt.status === 'Confirmed' && appt.adminRemarks && (
+                  <div className="alert alert-warning p-2 mt-2 mb-2"><small><strong>Admin Note (Appointment Kept):</strong> {appt.adminRemarks}</small></div>
+                )}
+
                 {/* Show Admin Counter Offer */}
                 {appt.status === 'Admin_Counter_Offer' && (
                   <div className="alert alert-warning p-2 mt-2 mb-2">
@@ -260,9 +319,44 @@ export default function PatientDashboard() {
                         placeholder={actionType === 'cancel' ? 'Why do you need to cancel?' : 'E.g., Can we do Friday afternoon?'}
                         value={patientRemark} onChange={(e) => setPatientRemark(e.target.value)} />
                     </div>
+
+                    {actionType === 'cancel' && (
+                      <div className="mb-3">
+                        <label className="form-label small fw-bold">Upload Proof (Optional, Max 5MB)</label>
+                        
+                        {/* Display the File Error if it exists */}
+                        {fileError && <div className="alert alert-danger py-1 px-2 small mb-2">{fileError}</div>}
+                        
+                        <div className="d-flex align-items-center gap-2">
+                          <input 
+                            type="file" 
+                            className="form-control form-control-sm" 
+                            accept=".jpg,.jpeg,.png,.pdf" 
+                            onChange={handleFileChange}
+                            id="cancelFileInput"
+                          />
+                          {/* Display the Remove button if a valid file is selected */}
+                          {cancelFile && (
+                            <button 
+                              type="button" 
+                              className="btn btn-sm btn-outline-danger" 
+                              onClick={() => {
+                                setCancelFile(null);
+                                setFileError('');
+                                document.getElementById('cancelFileInput').value = null; // Clear input UI
+                              }}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        <small className="text-muted" style={{ fontSize: '0.75rem' }}>Images or PDFs accepted.</small>
+                      </div>
+                    )}
+
                     <div className="d-flex gap-2">
                       <button type="submit" className="btn btn-sm btn-primary">Send to Admin</button>
-                      <button type="button" onClick={() => { setActionId(null); setPatientRemark(''); }} className="btn btn-sm btn-secondary">Go Back</button>
+                      <button type="button" onClick={() => { setActionId(null); setPatientRemark(''); setCancelFile(null); setFileError(''); }} className="btn btn-sm btn-secondary">Go Back</button>
                     </div>
                   </form>
                 )}

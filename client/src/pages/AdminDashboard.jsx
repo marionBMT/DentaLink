@@ -11,6 +11,8 @@ export default function AdminDashboard() {
   const [counterForm, setCounterForm] = useState({ date: '', time: '', remarks: '' });
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [keepId, setKeepId] = useState(null);
+  const [keepReason, setKeepReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const appointmentsPerPage = 4;
@@ -102,6 +104,22 @@ export default function AdminDashboard() {
       setRejectReason('');
       loadAppointments();
     } catch (err) { console.error("Failed to reject", err); }
+  };
+
+  const submitKeep = async (e, appt) => {
+    e.preventDefault();
+    try {
+      const isFromCounter = appt.adminSuggestedDate && (appt.requestedDate !== appt.adminSuggestedDate || appt.requestedTime !== appt.adminSuggestedTime);
+      const revertedStatus = isFromCounter ? 'Admin_Counter_Offer' : 'Confirmed';
+
+      await api.put(`/appointments/${appt._id}`, { 
+        status: revertedStatus, 
+        adminRemarks: keepReason // Save the reason they were denied cancellation
+      });
+      setKeepId(null);
+      setKeepReason('');
+      loadAppointments();
+    } catch (err) { console.error("Failed to keep appointment", err); }
   };
 
   const submitCounter = async (e) => {
@@ -318,6 +336,29 @@ export default function AdminDashboard() {
                       {appt.status === 'Rejected' && appt.adminRemarks && (
                          <div className="alert alert-danger p-2 py-1 mb-3"><small><strong>Rejection Reason:</strong> {appt.adminRemarks}</small></div>
                       )}
+                      {/* --- NEW: SHOW ADMIN'S COUNTER OFFER MESSAGE --- */}
+                      {appt.status === 'Admin_Counter_Offer' && appt.adminRemarks && (
+                         <div className="alert alert-warning p-2 py-1 mb-3 text-dark"><small><strong>Your Counter Message:</strong> {appt.adminRemarks}</small></div>
+                      )}
+                      
+                      {/* --- OPTIONAL: SHOW ADMIN'S KEEP APPOINTMENT MESSAGE --- */}
+                      {appt.status === 'Confirmed' && appt.adminRemarks && (
+                         <div className="alert alert-success p-2 py-1 mb-3"><small><strong>Keep Appointment Note:</strong> {appt.adminRemarks}</small></div>
+                      )}
+
+                      {/* --- NEW: VIEW CANCELLATION PROOF --- */}
+                      {appt.cancellationProofUrl && (
+                        <div className="mb-3">
+                          <a 
+                            href={appt.cancellationProofUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="btn btn-sm btn-outline-info fw-bold"
+                          >
+                            📄 View Attached Proof
+                          </a>
+                        </div>
+                      )}
 
                       {['Pending_Admin_Approval', 'Patient_Counter_Offer'].includes(appt.status) && counterId !== appt._id && rejectId !== appt._id && (
                         <div className="d-flex flex-wrap gap-2">
@@ -327,20 +368,26 @@ export default function AdminDashboard() {
                         </div>
                       )}
 
-                      {appt.status === 'Cancellation_Requested' && (
+                      {appt.status === 'Cancellation_Requested' && keepId !== appt._id && (
                          <div className="d-flex gap-2 p-2 bg-light border rounded flex-wrap">
                            <span className="me-auto align-self-center small fw-bold text-danger">Approve Cancellation?</span>
                            <button onClick={() => handleAction(appt._id, 'Cancelled')} className="btn btn-sm btn-danger">Confirm Cancel</button>
-                           <button 
-                                onClick={() => {
-                                    const isFromCounter = appt.adminSuggestedDate && (appt.requestedDate !== appt.adminSuggestedDate || appt.requestedTime !== appt.adminSuggestedTime);
-                                    handleAction(appt._id, isFromCounter ? 'Admin_Counter_Offer' : 'Confirmed');
-                                }} 
-                                className="btn btn-sm btn-secondary"
-                            >
-                                Keep Appointment
-                            </button>
+                           <button onClick={() => setKeepId(appt._id)} className="btn btn-sm btn-secondary">Keep Appointment</button>
                          </div>
+                      )}
+
+                      {keepId === appt._id && (
+                        <form onSubmit={(e) => submitKeep(e, appt)} className="mt-3 p-3 border rounded bg-light">
+                          <h6>Reason for Keeping Appointment</h6>
+                          <div className="mb-2">
+                            <input type="text" className="form-control form-control-sm" placeholder="e.g. Too late to cancel, clinic policy" required
+                              value={keepReason} onChange={(e) => setKeepReason(e.target.value)} />
+                          </div>
+                          <div className="d-flex gap-2">
+                            <button type="submit" className="btn btn-sm btn-secondary">Confirm Keep</button>
+                            <button type="button" onClick={() => setKeepId(null)} className="btn btn-sm btn-outline-dark">Cancel</button>
+                          </div>
+                        </form>
                       )}
 
                       {rejectId === appt._id && (

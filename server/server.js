@@ -10,7 +10,15 @@ const appointmentRoutes = require('./routes/appointments');
 const userRoutes = require('./routes/users');
 
 const app = express();
-app.use(cors());
+const corsOptions = {
+    origin: [
+        'http://localhost:5173', 
+        'https://denta-link-pi.vercel.app' 
+    ],
+    credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use('/api/users', userRoutes);

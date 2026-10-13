@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: 'http://localhost:5000/api' });
+const api = axios.create({ baseURL: 'https://dentalink-backend-34zx.onrender.com' });
 
 // Request Interceptor: Attach token to every request
 api.interceptors.request.use(config => {

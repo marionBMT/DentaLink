@@ -39,6 +39,7 @@ router.post('/register', async (req, res) => {
 
 // --- STEP 1: LOGIN (Check Password & Send OTP) ---
 router.post('/login', async (req, res) => {
+    console.log("Login request received:", req.body); // Debugging line
     try {
         const { identifier, password } = req.body;
 

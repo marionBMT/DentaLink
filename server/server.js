@@ -14,7 +14,8 @@ const app = express();
 const corsOptions = {
     origin: [
         'http://localhost:5173', 
-        'https://denta-link-pi.vercel.app' 
+        'https://denta-link-pi.vercel.app',
+        'https://denta-link-frb2aht96-marionteam5.vercel.app'
     ],
     credentials: true,
 };

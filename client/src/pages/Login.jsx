@@ -40,11 +40,10 @@ export default function Login() {
       localStorage.setItem('name', res.data.name);
 
       if (res.data.role === 'admin') {
-        navigate('/admin');
+        window.location.href = '/admin';
       } else {
-        navigate('/dashboard');
+        window.location.href = '/dashboard';
       }
-      window.location.reload(); 
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid OTP');
     }

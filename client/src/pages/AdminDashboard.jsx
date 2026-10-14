@@ -9,6 +9,12 @@ import {
 } from '../utils/validation';
 import ServicesTab from './Services';
 import { openCancellationProof } from '../utils/proofs';
+import {
+  APPOINTMENT_TIME_SLOTS,
+  appointmentStatusClass,
+  formatAppointmentStatus,
+  formatAppointmentTime,
+} from '../utils/appointments';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('appointments');
@@ -60,17 +66,8 @@ export default function AdminDashboard() {
   // --- ACTION ERROR BANNER (server errors for list updates, creates, etc.) ---
   const [actionError, setActionError] = useState('');
 
-  // --- CONFLICT & TIME FORMATTING ---
+  // --- SCHEDULE CONFLICT ---
   const [conflictError, setConflictError] = useState('');
-
-  const formatTimeFriendly = (timeString) => {
-    if (!timeString) return '';
-    const [hour, minute] = timeString.split(':');
-    let h = parseInt(hour, 10);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12; 
-    return `${timeString} (${h}:${minute} ${ampm})`;
-  };
 
   const loadAppointments = useCallback(async (page = currentPage, search = searchTerm) => {
     try {
@@ -313,24 +310,14 @@ export default function AdminDashboard() {
       setModalBusy(false);
     }
   };
-  
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
-  const generateTimeSlots = () => {
-    const slots = [];
-    for (let i = 8; i <= 18; i++) {
-      const hour24 = i.toString().padStart(2, '0');
-      const hour12 = i > 12 ? i - 12 : (i === 0 ? 12 : i);
-      const ampm = i >= 12 ? 'PM' : 'AM';
-      slots.push({ value: `${hour24}:00`, label: `${hour12}:00 ${ampm}` });
-      if (i !== 18) slots.push({ value: `${hour24}:30`, label: `${hour12}:30 ${ampm}` });
-    }
-    return slots;
-  };
-  const timeSlots = generateTimeSlots();
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+  }).format(new Date());
 
   return (
     <div className="mt-4 position-relative">
+      <h1 className="visually-hidden">Admin Dashboard</h1>
       {actionError && (
         <div className="alert alert-danger alert-dismissible" role="alert">
           {actionError}
@@ -338,27 +325,27 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <ul className="nav nav-tabs mb-4">
-        <li className="nav-item">
-          <button className={`nav-link fw-bold ${activeTab === 'appointments' ? 'active text-primary' : 'text-secondary'}`} 
+      <ul className="nav nav-tabs flex-nowrap overflow-x-auto mb-4" role="tablist" aria-label="Admin dashboard sections">
+        <li className="nav-item" role="presentation">
+          <button type="button" role="tab" aria-selected={activeTab === 'appointments'} className={`nav-link fw-bold text-nowrap ${activeTab === 'appointments' ? 'active text-primary' : 'text-secondary'}`}
                   onClick={() => setActiveTab('appointments')}>
             Appointment Requests
           </button>
         </li>
-        <li className="nav-item">
-          <button className={`nav-link fw-bold ${activeTab === 'users' ? 'active text-primary' : 'text-secondary'}`} 
+        <li className="nav-item" role="presentation">
+          <button type="button" role="tab" aria-selected={activeTab === 'users'} className={`nav-link fw-bold text-nowrap ${activeTab === 'users' ? 'active text-primary' : 'text-secondary'}`}
                   onClick={() => setActiveTab('users')}>
             User Management
           </button>
         </li>
-        <li className="nav-item">
-          <button className={`nav-link fw-bold ${activeTab === 'archives' ? 'active text-danger' : 'text-secondary'}`} 
+        <li className="nav-item" role="presentation">
+          <button type="button" role="tab" aria-selected={activeTab === 'archives'} className={`nav-link fw-bold text-nowrap ${activeTab === 'archives' ? 'active text-danger' : 'text-secondary'}`}
                   onClick={() => setActiveTab('archives')}>
             Archives
           </button>
         </li>
-        <li className="nav-item">
-          <button className={`nav-link fw-bold ${activeTab === 'services' ? 'active text-primary' : 'text-secondary'}`} 
+        <li className="nav-item" role="presentation">
+          <button type="button" role="tab" aria-selected={activeTab === 'services'} className={`nav-link fw-bold text-nowrap ${activeTab === 'services' ? 'active text-primary' : 'text-secondary'}`}
                   onClick={() => setActiveTab('services')}>
             Services
           </button>
@@ -369,7 +356,8 @@ export default function AdminDashboard() {
       {activeTab === 'appointments' && (
         <div>
           <div className="mb-4">
-            <input type="text" className="form-control shadow-sm" placeholder="Search appointments or dentists..." 
+            <label className="visually-hidden" htmlFor="appointment-search">Search appointments or dentists</label>
+            <input id="appointment-search" name="appointmentSearch" type="search" className="form-control shadow-sm" placeholder="Search appointments or dentists…" autoComplete="off"
               value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
           </div>
           
@@ -387,13 +375,8 @@ export default function AdminDashboard() {
                         </h5>
                         <div className="d-flex align-items-center gap-2">
                           {/* Restored rich dynamic badge colors */}
-                          <span className={`badge ${
-                            appt.status === 'Confirmed' ? 'bg-success' : 
-                            appt.status.includes('Counter') ? 'bg-warning text-dark' : 
-                            ['Rejected', 'Cancelled'].includes(appt.status) ? 'bg-danger' : 
-                            appt.status === 'Cancellation_Requested' ? 'bg-danger' : 'bg-secondary'
-                          }`}>
-                            {appt.status.replace(/_/g, ' ')}
+                          <span className={`badge ${appointmentStatusClass(appt.status)}`}>
+                            {formatAppointmentStatus(appt.status)}
                           </span>
                           <button 
                             onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'archive' })}
@@ -402,7 +385,7 @@ export default function AdminDashboard() {
                       </div>
                       
                       <p className="mb-1"><strong>Patient:</strong> {appt.patient?.name} <span className="text-muted">({appt.patient?.email})</span></p>
-                      <p className="mb-2"><strong>Requested Time:</strong> {appt.requestedDate} at {formatTimeFriendly(appt.requestedTime)}</p>
+                      <p className="mb-2"><strong>Requested Time:</strong> {appt.requestedDate} at {formatAppointmentTime(appt.requestedTime)}</p>
 
                       {/* --- RESTORED CONTROLS AND ALERTS --- */}
                       {appt.patientRemarks && (
@@ -436,17 +419,17 @@ export default function AdminDashboard() {
 
                       {['Pending_Admin_Approval', 'Patient_Counter_Offer'].includes(appt.status) && counterId !== appt._id && rejectId !== appt._id && (
                         <div className="d-flex flex-wrap gap-2">
-                          <button onClick={() => handleApprove(appt)} className="btn btn-sm btn-success">Approve</button>
-                          <button onClick={() => setCounterId(appt._id)} className="btn btn-sm btn-warning">Counter Offer</button>
-                          <button onClick={() => setRejectId(appt._id)} className="btn btn-sm btn-danger">Reject</button>
+                          <button type="button" onClick={() => handleApprove(appt)} className="btn btn-sm btn-success">Approve</button>
+                          <button type="button" onClick={() => setCounterId(appt._id)} className="btn btn-sm btn-warning">Counter Offer</button>
+                          <button type="button" onClick={() => setRejectId(appt._id)} className="btn btn-sm btn-danger">Reject</button>
                         </div>
                       )}
 
                       {appt.status === 'Cancellation_Requested' && keepId !== appt._id && (
                          <div className="d-flex gap-2 p-2 bg-light border rounded flex-wrap">
-                           <span className="me-auto align-self-center small fw-bold text-danger">Approve Cancellation?</span>
-                           <button onClick={() => handleAction(appt._id, 'Cancelled')} className="btn btn-sm btn-danger">Confirm Cancel</button>
-                           <button onClick={() => setKeepId(appt._id)} className="btn btn-sm btn-secondary">Keep Appointment</button>
+                           <span className="me-auto align-self-center small fw-bold text-warning-emphasis">Cancellation review needed</span>
+                           <button type="button" onClick={() => handleAction(appt._id, 'Cancelled')} className="btn btn-sm btn-danger">Confirm Cancel</button>
+                           <button type="button" onClick={() => setKeepId(appt._id)} className="btn btn-sm btn-secondary">Keep Appointment</button>
                          </div>
                       )}
 
@@ -454,12 +437,13 @@ export default function AdminDashboard() {
                         <form onSubmit={(e) => submitKeep(e, appt)} className="mt-3 p-3 border rounded bg-light">
                           <h6>Reason for Keeping Appointment</h6>
                           <div className="mb-2">
-                            <input type="text" className="form-control form-control-sm" placeholder="e.g. Too late to cancel, clinic policy" required
+                            <label className="visually-hidden" htmlFor={`keep-reason-${appt._id}`}>Reason for keeping appointment</label>
+                            <input id={`keep-reason-${appt._id}`} name="keepReason" type="text" className="form-control form-control-sm" placeholder="e.g. Too late to cancel, clinic policy" required autoComplete="off"
                               value={keepReason} onChange={(e) => setKeepReason(e.target.value)} />
                           </div>
                           <div className="d-flex gap-2">
                             <button type="submit" className="btn btn-sm btn-secondary">Confirm Keep</button>
-                            <button type="button" onClick={() => setKeepId(null)} className="btn btn-sm btn-outline-dark">Cancel</button>
+                            <button type="button" onClick={() => setKeepId(null)} className="btn btn-sm btn-outline-secondary">Cancel</button>
                           </div>
                         </form>
                       )}
@@ -468,7 +452,8 @@ export default function AdminDashboard() {
                         <form onSubmit={submitReject} className="mt-3 p-3 border rounded bg-light">
                           <h6>Reason for Rejection</h6>
                           <div className="mb-2">
-                            <input type="text" className="form-control form-control-sm" placeholder="e.g. Schedule is full for the week" required
+                            <label className="visually-hidden" htmlFor={`reject-reason-${appt._id}`}>Reason for rejection</label>
+                            <input id={`reject-reason-${appt._id}`} name="rejectReason" type="text" className="form-control form-control-sm" placeholder="e.g. Schedule is full for the week" required autoComplete="off"
                               value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
                           </div>
                           <div className="d-flex gap-2">
@@ -482,17 +467,20 @@ export default function AdminDashboard() {
                         <form onSubmit={submitCounter} className="mt-3 p-3 border rounded bg-light">
                           <h6>Suggest New Time</h6>
                           <div className="mb-2">
-                            <input type="date" className="form-control form-control-sm" min={today} required
+                            <label className="visually-hidden" htmlFor={`counter-date-${appt._id}`}>Suggested date</label>
+                            <input id={`counter-date-${appt._id}`} name="counterDate" type="date" className="form-control form-control-sm" min={today} required
                               value={counterForm.date} onChange={(e) => setCounterForm({...counterForm, date: e.target.value})} />
                           </div>
                           <div className="mb-2">
-                            <select className="form-select form-select-sm" required value={counterForm.time} onChange={(e) => setCounterForm({...counterForm, time: e.target.value})}>
+                            <label className="visually-hidden" htmlFor={`counter-time-${appt._id}`}>Suggested time</label>
+                            <select id={`counter-time-${appt._id}`} name="counterTime" className="form-select form-select-sm" required value={counterForm.time} onChange={(e) => setCounterForm({...counterForm, time: e.target.value})}>
                               <option value="" disabled>Select a time</option>
-                              {timeSlots.map(slot => <option key={slot.value} value={slot.value}>{slot.label}</option>)}
+                              {APPOINTMENT_TIME_SLOTS.map(slot => <option key={slot.value} value={slot.value}>{slot.label}</option>)}
                             </select>
                           </div>
                           <div className="mb-2">
-                            <input type="text" className="form-control form-control-sm" placeholder="Reason (e.g. Doctor in surgery)" required
+                            <label className="visually-hidden" htmlFor={`counter-remarks-${appt._id}`}>Reason for suggested time</label>
+                            <input id={`counter-remarks-${appt._id}`} name="counterRemarks" type="text" className="form-control form-control-sm" placeholder="Reason (e.g. Doctor in surgery)" required autoComplete="off"
                               value={counterForm.remarks} onChange={(e) => setCounterForm({...counterForm, remarks: e.target.value})} />
                           </div>
                           <div className="d-flex gap-2">
@@ -509,18 +497,18 @@ export default function AdminDashboard() {
           )}
 
           {totalPages > 1 && (
-            <nav className="mt-4">
+            <nav className="mt-4" aria-label="Appointment pages">
               <ul className="pagination justify-content-center">
                 <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                  <button onClick={() => setCurrentPage(currentPage - 1)} className="page-link">Previous</button>
+                  <button type="button" onClick={() => setCurrentPage(currentPage - 1)} className="page-link" disabled={currentPage === 1}>Previous</button>
                 </li>
                 {[...Array(totalPages)].map((_, i) => (
                   <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
-                    <button onClick={() => setCurrentPage(i + 1)} className="page-link">{i + 1}</button>
+                    <button type="button" onClick={() => setCurrentPage(i + 1)} className="page-link" aria-current={currentPage === i + 1 ? 'page' : undefined} aria-label={`Go to appointment page ${i + 1}`}>{i + 1}</button>
                   </li>
                 ))}
                 <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                  <button onClick={() => setCurrentPage(currentPage + 1)} className="page-link">Next</button>
+                  <button type="button" onClick={() => setCurrentPage(currentPage + 1)} className="page-link" disabled={currentPage === totalPages}>Next</button>
                 </li>
               </ul>
             </nav>
@@ -538,31 +526,31 @@ export default function AdminDashboard() {
               {userSuccess && <div className="alert alert-success py-2">{userSuccess}</div>}
               <form onSubmit={handleCreateUser}>
                 <div className="mb-3">
-                  <label className="form-label small">Account Role</label>
-                  <select className="form-select" value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value})}>
+                  <label className="form-label small" htmlFor="new-user-role">Account Role</label>
+                  <select id="new-user-role" name="role" className="form-select" value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value})}>
                     <option value="patient">Patient / Customer</option>
                     <option value="admin">Administrator / Staff</option>
                   </select>
                 </div>
                 <div className="mb-3">
-                  <label className="form-label small">Username</label>
-                  <input type="text" className="form-control" required value={newUser.username} onChange={(e) => setNewUser({...newUser, username: e.target.value})} />
+                  <label className="form-label small" htmlFor="new-user-username">Username</label>
+                  <input id="new-user-username" name="username" type="text" className="form-control" required autoComplete="off" spellCheck={false} value={newUser.username} onChange={(e) => setNewUser({...newUser, username: e.target.value})} />
                 </div>
                 <div className="mb-3">
-                  <label className="form-label small">Full Name</label>
-                  <input type="text" className="form-control" required value={newUser.name} onChange={(e) => setNewUser({...newUser, name: e.target.value})} />
+                  <label className="form-label small" htmlFor="new-user-name">Full Name</label>
+                  <input id="new-user-name" name="name" type="text" className="form-control" required autoComplete="off" value={newUser.name} onChange={(e) => setNewUser({...newUser, name: e.target.value})} />
                 </div>
                 <div className="mb-3">
-                  <label className="form-label small">Email Address</label>
-                  <input type="email" className="form-control" required value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} />
+                  <label className="form-label small" htmlFor="new-user-email">Email Address</label>
+                  <input id="new-user-email" name="email" type="email" className="form-control" required autoComplete="off" spellCheck={false} value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} />
                 </div>
                 <div className="mb-3">
-                  <label className="form-label small">Password</label>
-                  <input type="password" className="form-control" required value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} />
+                  <label className="form-label small" htmlFor="new-user-password">Password</label>
+                  <input id="new-user-password" name="password" type="password" className="form-control" required autoComplete="new-password" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} />
                 </div>
                 <div className="mb-4">
-                  <label className="form-label small">Confirm Password</label>
-                  <input type="password" className="form-control" required value={newUser.confirmPassword} onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})} />
+                  <label className="form-label small" htmlFor="new-user-confirm-password">Confirm Password</label>
+                  <input id="new-user-confirm-password" name="confirmPassword" type="password" className="form-control" required autoComplete="new-password" value={newUser.confirmPassword} onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})} />
                 </div>
                 <button type="submit" className="btn btn-primary w-100">Create Account</button>
               </form>
@@ -572,9 +560,10 @@ export default function AdminDashboard() {
           <div className="col-md-8">
             <div className="card shadow-sm">
               <div className="card-header bg-white border-bottom pb-0">
-                <div className="d-flex justify-content-between align-items-center mb-3">
+                <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
                   <h5 className="mb-0">Registered Users</h5>
-                  <input type="text" className="form-control form-control-sm w-50" placeholder="Search name, email, or username..."
+                  <label className="visually-hidden" htmlFor="user-search">Search users</label>
+                  <input id="user-search" name="userSearch" type="search" className="form-control form-control-sm" placeholder="Search name, email, or username…" autoComplete="off"
                     value={userSearchTerm} onChange={(e) => { setUserSearchTerm(e.target.value); setUserCurrentPage(1); }} />
                 </div>
               </div>
@@ -610,18 +599,18 @@ export default function AdminDashboard() {
             </div>
 
             {totalUserPages > 1 && (
-              <nav className="mt-4">
+              <nav className="mt-4" aria-label="User pages">
                 <ul className="pagination justify-content-center">
                   <li className={`page-item ${userCurrentPage === 1 ? 'disabled' : ''}`}>
-                    <button onClick={() => setUserCurrentPage(userCurrentPage - 1)} className="page-link">Previous</button>
+                    <button type="button" onClick={() => setUserCurrentPage(userCurrentPage - 1)} className="page-link" disabled={userCurrentPage === 1}>Previous</button>
                   </li>
                   {[...Array(totalUserPages)].map((_, i) => (
                     <li key={i + 1} className={`page-item ${userCurrentPage === i + 1 ? 'active' : ''}`}>
-                      <button onClick={() => setUserCurrentPage(i + 1)} className="page-link">{i + 1}</button>
+                      <button type="button" onClick={() => setUserCurrentPage(i + 1)} className="page-link" aria-current={userCurrentPage === i + 1 ? 'page' : undefined} aria-label={`Go to user page ${i + 1}`}>{i + 1}</button>
                     </li>
                   ))}
                   <li className={`page-item ${userCurrentPage === totalUserPages ? 'disabled' : ''}`}>
-                    <button onClick={() => setUserCurrentPage(userCurrentPage + 1)} className="page-link">Next</button>
+                    <button type="button" onClick={() => setUserCurrentPage(userCurrentPage + 1)} className="page-link" disabled={userCurrentPage === totalUserPages}>Next</button>
                   </li>
                 </ul>
               </nav>
@@ -644,25 +633,25 @@ export default function AdminDashboard() {
                       <small className="text-muted">{user.email}</small>
                     </div>
                     <div className="d-flex gap-2">
-                        <button onClick={() => openConfirm({ type: 'user', id: user._id, action: 'restore' })} className="btn btn-sm btn-success">Restore</button>
-                        <button onClick={() => openConfirm({ type: 'user', id: user._id, action: 'delete' })} className="btn btn-sm btn-danger">Delete</button>
+                        <button type="button" onClick={() => openConfirm({ type: 'user', id: user._id, action: 'restore' })} className="btn btn-sm btn-success">Restore</button>
+                        <button type="button" onClick={() => openConfirm({ type: 'user', id: user._id, action: 'delete' })} className="btn btn-sm btn-danger">Delete</button>
                     </div>
                   </div>
               ))}
             </div>
             {archivedUserPages > 1 && (
-              <nav className="mt-3">
+              <nav className="mt-3" aria-label="Archived user pages">
                 <ul className="pagination pagination-sm justify-content-center">
                   <li className={`page-item ${archivedUserPage === 1 ? 'disabled' : ''}`}>
-                    <button className="page-link" onClick={() => setArchivedUserPage(archivedUserPage - 1)}>Previous</button>
+                    <button type="button" className="page-link" onClick={() => setArchivedUserPage(archivedUserPage - 1)} disabled={archivedUserPage === 1}>Previous</button>
                   </li>
                   {[...Array(archivedUserPages)].map((_, i) => (
                     <li key={i + 1} className={`page-item ${archivedUserPage === i + 1 ? 'active' : ''}`}>
-                      <button className="page-link" onClick={() => setArchivedUserPage(i + 1)}>{i + 1}</button>
+                      <button type="button" className="page-link" onClick={() => setArchivedUserPage(i + 1)} aria-current={archivedUserPage === i + 1 ? 'page' : undefined} aria-label={`Go to archived user page ${i + 1}`}>{i + 1}</button>
                     </li>
                   ))}
                   <li className={`page-item ${archivedUserPage === archivedUserPages ? 'disabled' : ''}`}>
-                    <button className="page-link" onClick={() => setArchivedUserPage(archivedUserPage + 1)}>Next</button>
+                    <button type="button" className="page-link" onClick={() => setArchivedUserPage(archivedUserPage + 1)} disabled={archivedUserPage === archivedUserPages}>Next</button>
                   </li>
                 </ul>
               </nav>
@@ -677,28 +666,28 @@ export default function AdminDashboard() {
                   <div key={appt._id} className="list-group-item d-flex justify-content-between align-items-center p-3 bg-light">
                     <div>
                       <h6 className="mb-0 text-muted text-decoration-line-through">{appt.serviceType} - {appt.dentistName}</h6>
-                      <small className="text-muted">{appt.patient?.name} - {appt.requestedDate} at {formatTimeFriendly(appt.requestedTime)}</small>
+                      <small className="text-muted">{appt.patient?.name} - {appt.requestedDate} at {formatAppointmentTime(appt.requestedTime)}</small>
                     </div>
                     <div className="d-flex gap-2">
-                        <button onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'restore' })} className="btn btn-sm btn-success">Restore</button>
-                        <button onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'delete' })} className="btn btn-sm btn-danger">Delete</button>
+                        <button type="button" onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'restore' })} className="btn btn-sm btn-success">Restore</button>
+                        <button type="button" onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'delete' })} className="btn btn-sm btn-danger">Delete</button>
                     </div>
                   </div>
               ))}
             </div>
             {archivedAppointmentPages > 1 && (
-              <nav className="mt-3">
+              <nav className="mt-3" aria-label="Archived appointment pages">
                 <ul className="pagination pagination-sm justify-content-center">
                   <li className={`page-item ${archivedAppointmentPage === 1 ? 'disabled' : ''}`}>
-                    <button className="page-link" onClick={() => setArchivedAppointmentPage(archivedAppointmentPage - 1)}>Previous</button>
+                    <button type="button" className="page-link" onClick={() => setArchivedAppointmentPage(archivedAppointmentPage - 1)} disabled={archivedAppointmentPage === 1}>Previous</button>
                   </li>
                   {[...Array(archivedAppointmentPages)].map((_, i) => (
                     <li key={i + 1} className={`page-item ${archivedAppointmentPage === i + 1 ? 'active' : ''}`}>
-                      <button className="page-link" onClick={() => setArchivedAppointmentPage(i + 1)}>{i + 1}</button>
+                      <button type="button" className="page-link" onClick={() => setArchivedAppointmentPage(i + 1)} aria-current={archivedAppointmentPage === i + 1 ? 'page' : undefined} aria-label={`Go to archived appointment page ${i + 1}`}>{i + 1}</button>
                     </li>
                   ))}
                   <li className={`page-item ${archivedAppointmentPage === archivedAppointmentPages ? 'disabled' : ''}`}>
-                    <button className="page-link" onClick={() => setArchivedAppointmentPage(archivedAppointmentPage + 1)}>Next</button>
+                    <button type="button" className="page-link" onClick={() => setArchivedAppointmentPage(archivedAppointmentPage + 1)} disabled={archivedAppointmentPage === archivedAppointmentPages}>Next</button>
                   </li>
                 </ul>
               </nav>
@@ -735,21 +724,27 @@ export default function AdminDashboard() {
           {itemToProcess.action === 'archive' && (
             <div className="bg-light p-3 border rounded">
               <div className="mb-2">
-                <label className="form-label small fw-bold">Reason for Archiving <span className="text-danger">*</span></label>
+                <label className="form-label small fw-bold" htmlFor="archive-reason">Reason for Archiving <span className="text-danger">*</span></label>
                 <textarea
+                  id="archive-reason"
+                  name="archiveReason"
                   className="form-control form-control-sm"
                   rows="2"
-                  placeholder="Provide a clear reason..."
+                  placeholder="Provide a clear reason…"
+                  data-dialog-autofocus
                   value={archiveForm.reason}
                   onChange={(e) => setArchiveForm({...archiveForm, reason: e.target.value})}
                 ></textarea>
               </div>
               <div>
-                <label className="form-label small fw-bold">Admin Contact (Email or Number) <span className="text-danger">*</span></label>
+                <label className="form-label small fw-bold" htmlFor="archive-contact">Admin Contact (Email or Number) <span className="text-danger">*</span></label>
                 <input
+                  id="archive-contact"
+                  name="archiveContact"
                   type="text"
                   className="form-control form-control-sm"
                   placeholder="e.g. admin@dentalink.com or 09123456789"
+                  autoComplete="off"
                   value={archiveForm.contact}
                   onChange={(e) => setArchiveForm({...archiveForm, contact: e.target.value})}
                 />
@@ -761,26 +756,16 @@ export default function AdminDashboard() {
 
       {/* --- SCHEDULE CONFLICT MODAL --- */}
       {conflictError && (
-        <>
-          <div className="modal-backdrop fade show" style={{ zIndex: 1060 }}></div>
-          <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1070 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content shadow border-danger">
-                <div className="modal-header bg-danger text-white">
-                  <h5 className="modal-title">Schedule Conflict Detected</h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={() => setConflictError('')}></button>
-                </div>
-                <div className="modal-body text-center py-4">
-                  <div className="mb-3 text-danger" style={{ fontSize: '3rem' }}>⚠️</div>
-                  <p className="mb-0 fs-5">{conflictError}</p>
-                </div>
-                <div className="modal-footer bg-light justify-content-center">
-                  <button type="button" className="btn btn-secondary px-4" onClick={() => setConflictError('')}>Understood</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
+        <ConfirmModal
+          title="Schedule Conflict Detected"
+          variant="danger"
+          confirmLabel="Understood"
+          hideCancel
+          onConfirm={() => setConflictError('')}
+          onCancel={() => setConflictError('')}
+        >
+          <p className="mb-0">{conflictError}</p>
+        </ConfirmModal>
       )}
 
     </div>

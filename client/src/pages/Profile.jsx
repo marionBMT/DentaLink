@@ -194,7 +194,7 @@ export default function Profile() {
       <div className="col-md-6 col-lg-5">
         <div className="card shadow-sm border-0">
           <div className="card-header bg-primary text-white p-3">
-            <h4 className="mb-0">User Profile</h4>
+            <h1 className="h4 mb-0">User Profile</h1>
           </div>
           <div className="card-body p-4 bg-light">
             <div className="mb-4">
@@ -202,6 +202,7 @@ export default function Profile() {
                 <h5 className="text-secondary mb-0">Account Details</h5>
                 {!isEditing && (
                   <button
+                    type="button"
                     onClick={() => setIsEditing(true)}
                     className="btn btn-sm btn-outline-primary"
                   >
@@ -210,9 +211,9 @@ export default function Profile() {
                 )}
               </div>
 
-              {error && <div className="alert alert-danger py-2">{error}</div>}
+              {error && <div className="alert alert-danger py-2" role="alert" aria-live="assertive">{error}</div>}
               {success && (
-                <div className="alert alert-success py-2">{success}</div>
+                <div className="alert alert-success py-2" role="status" aria-live="polite">{success}</div>
               )}
 
               {!isEditing ? (
@@ -252,7 +253,7 @@ export default function Profile() {
               ) : (
                 <form onSubmit={handleSave}>
                   <div className="mb-3">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold" htmlFor="profile-username">
                       Username{" "}
                       <span className="text-muted fw-normal">
                         (Cannot be changed)
@@ -260,17 +261,20 @@ export default function Profile() {
                     </label>
                     <input
                       type="text"
+                      id="profile-username"
                       className="form-control bg-light"
                       value={profile.username}
                       disabled
                     />
                   </div>
                   <div className="mb-3">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold" htmlFor="profile-name">
                       Full Name <span className="text-danger">*</span>
                     </label>
                     <input
                       type="text"
+                      id="profile-name"
+                      name="name"
                       className="form-control"
                       required
                       maxLength={100}
@@ -281,12 +285,14 @@ export default function Profile() {
                     />
                   </div>
                   <div className="mb-3">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold" htmlFor="profile-contact">
                       Contact Number{" "}
                       <span className="text-muted fw-normal">(Optional)</span>
                     </label>
                     <input
                       type="text"
+                      id="profile-contact"
+                      name="contactNumber"
                       className="form-control"
                       placeholder="e.g. 09770493211 or 8709768"
                       value={formData.contactNumber}
@@ -299,11 +305,13 @@ export default function Profile() {
                     />
                   </div>
                   <div className="mb-3">
-                    <label className="form-label small fw-bold">
+                    <label className="form-label small fw-bold" htmlFor="profile-address">
                       Home Address{" "}
                       <span className="text-muted fw-normal">(Optional)</span>
                     </label>
                     <textarea
+                      id="profile-address"
+                      name="address"
                       className="form-control"
                       rows="2"
                       maxLength={300}
@@ -320,7 +328,7 @@ export default function Profile() {
                       className="btn btn-success w-50"
                       disabled={saving}
                     >
-                      {saving ? "Saving..." : "Save Changes"}
+                      {saving ? "Saving…" : "Save Changes"}
                     </button>
                     <button
                       type="button"
@@ -378,11 +386,13 @@ export default function Profile() {
               )}
               <form onSubmit={handleChangePassword}>
                 <div className="mb-3">
-                  <label className="form-label small fw-bold">
+                  <label className="form-label small fw-bold" htmlFor="current-password">
                     Current Password
                   </label>
                   <input
                     type="password"
+                    id="current-password"
+                    name="currentPassword"
                     className="form-control"
                     required
                     autoComplete="current-password"
@@ -393,11 +403,13 @@ export default function Profile() {
                   />
                 </div>
                 <div className="mb-3">
-                  <label className="form-label small fw-bold">
+                  <label className="form-label small fw-bold" htmlFor="new-password">
                     New Password
                   </label>
                   <input
                     type="password"
+                    id="new-password"
+                    name="newPassword"
                     className="form-control"
                     required
                     autoComplete="new-password"
@@ -409,11 +421,13 @@ export default function Profile() {
                   <small className="text-muted">{PASSWORD_MESSAGE}</small>
                 </div>
                 <div className="mb-3">
-                  <label className="form-label small fw-bold">
+                  <label className="form-label small fw-bold" htmlFor="confirm-new-password">
                     Confirm New Password
                   </label>
                   <input
                     type="password"
+                    id="confirm-new-password"
+                    name="confirmPassword"
                     className="form-control"
                     required
                     autoComplete="new-password"
@@ -428,7 +442,7 @@ export default function Profile() {
                   className="btn btn-outline-primary w-100"
                   disabled={pwBusy}
                 >
-                  {pwBusy ? "Updating..." : "Update Password"}
+                  {pwBusy ? "Updating…" : "Update Password"}
                 </button>
                 <small className="text-muted d-block mt-2">
                   You will be signed out everywhere after changing your
@@ -478,9 +492,11 @@ export default function Profile() {
             {role === "patient" && " and every appointment you have made"}.
             There is no way to recover it.
           </p>
-          <label className="form-label small fw-bold">Your password</label>
+          <label className="form-label small fw-bold" htmlFor="delete-account-password">Your password</label>
           <input
             type="password"
+            id="delete-account-password"
+            name="deletePassword"
             className="form-control"
             autoComplete="current-password"
             value={deletePassword}

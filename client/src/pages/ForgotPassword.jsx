@@ -98,22 +98,25 @@ export default function ForgotPassword() {
   return (
     <div className="row justify-content-center mt-5 position-relative">
       <div className="col-md-6 col-lg-4">
-        <h2 className="text-center mb-4">Password Recovery</h2>
-        {error && <div className="alert alert-danger">{error}</div>}
-        {info && <div className="alert alert-info">{info}</div>}
+        <h1 className="h2 text-center mb-4">Password Recovery</h1>
+        {error && <div className="alert alert-danger" role="alert" aria-live="assertive">{error}</div>}
+        {info && <div className="alert alert-info" role="status" aria-live="polite">{info}</div>}
 
         <div className="card p-4 shadow-sm">
           {step === 1 && (
             <form onSubmit={handleSendOtp}>
               <div className="mb-3">
-                <label className="form-label">Enter your Email</label>
+                <label className="form-label" htmlFor="recovery-email">Email address</label>
                 <input
+                  id="recovery-email"
+                  name="email"
                   type="email"
                   className="form-control"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
+                  spellCheck={false}
                 />
               </div>
               <button
@@ -121,7 +124,7 @@ export default function ForgotPassword() {
                 className="btn btn-primary w-100 mb-3"
                 disabled={busy}
               >
-                {busy ? "Sending..." : "Send OTP"}
+                {busy ? "Sending…" : "Send OTP"}
               </button>
               <Link
                 to="/login"
@@ -135,19 +138,21 @@ export default function ForgotPassword() {
           {step === 2 && (
             <form onSubmit={handleVerifyOtp}>
               <div className="mb-3">
-                <label className="form-label text-center d-block">
+                <label className="form-label text-center d-block" htmlFor="recovery-otp">
                   Enter OTP
                 </label>
                 <input
                   type="text"
+                  id="recovery-otp"
+                  name="otp"
                   inputMode="numeric"
                   className="form-control text-center"
                   maxLength="6"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                   required
-                  autoFocus
                   autoComplete="one-time-code"
+                  spellCheck={false}
                 />
               </div>
               <button
@@ -155,7 +160,7 @@ export default function ForgotPassword() {
                 className="btn btn-primary w-100 mb-3"
                 disabled={busy || otp.length !== 6}
               >
-                {busy ? "Verifying..." : "Verify OTP"}
+                {busy ? "Verifying…" : "Verify OTP"}
               </button>
               <Link
                 to="/login"
@@ -169,8 +174,10 @@ export default function ForgotPassword() {
           {step === 3 && (
             <form onSubmit={initiatePasswordChange}>
               <div className="mb-3">
-                <label className="form-label">New Password</label>
+                <label className="form-label" htmlFor="recovery-new-password">New password</label>
                 <input
+                  id="recovery-new-password"
+                  name="newPassword"
                   type="password"
                   className="form-control"
                   value={newPassword}
@@ -181,8 +188,10 @@ export default function ForgotPassword() {
                 <small className="text-muted">{PASSWORD_MESSAGE}</small>
               </div>
               <div className="mb-3">
-                <label className="form-label">Confirm New Password</label>
+                <label className="form-label" htmlFor="recovery-confirm-password">Confirm new password</label>
                 <input
+                  id="recovery-confirm-password"
+                  name="confirmPassword"
                   type="password"
                   className="form-control"
                   value={confirmPassword}

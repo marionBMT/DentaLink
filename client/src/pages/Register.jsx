@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { errorMessage } from "../api/axiosClient";
+import ConfirmModal from "../components/ConfirmModal";
 import {
   PASSWORD_MESSAGE,
   USERNAME_MESSAGE,
@@ -51,12 +52,14 @@ export default function Register() {
   return (
     <div className="row justify-content-center mt-5 position-relative">
       <div className="col-md-6 col-lg-5">
-        <h2 className="text-center mb-4">Sign Up</h2>
-        {error && <div className="alert alert-danger">{error}</div>}
+        <h1 className="h2 text-center mb-4">Create your account</h1>
+        {error && <div className="alert alert-danger" role="alert" aria-live="assertive">{error}</div>}
         <form onSubmit={handleRegister} className="card p-4 shadow-sm">
           <div className="mb-3">
-            <label className="form-label">Username</label>
+            <label className="form-label" htmlFor="register-username">Username</label>
             <input
+              id="register-username"
+              name="username"
               type="text"
               className="form-control"
               value={username}
@@ -67,8 +70,10 @@ export default function Register() {
             <small className="text-muted">{USERNAME_MESSAGE}</small>
           </div>
           <div className="mb-3">
-            <label className="form-label">Full Name</label>
+            <label className="form-label" htmlFor="register-name">Full name</label>
             <input
+              id="register-name"
+              name="name"
               type="text"
               className="form-control"
               value={name}
@@ -79,8 +84,10 @@ export default function Register() {
             />
           </div>
           <div className="mb-3">
-            <label className="form-label">Email</label>
+            <label className="form-label" htmlFor="register-email">Email</label>
             <input
+              id="register-email"
+              name="email"
               type="email"
               className="form-control"
               value={email}
@@ -90,8 +97,10 @@ export default function Register() {
             />
           </div>
           <div className="mb-3">
-            <label className="form-label">Password</label>
+            <label className="form-label" htmlFor="register-password">Password</label>
             <input
+              id="register-password"
+              name="password"
               type="password"
               className="form-control"
               value={password}
@@ -102,8 +111,10 @@ export default function Register() {
             <small className="text-muted">{PASSWORD_MESSAGE}</small>
           </div>
           <div className="mb-4">
-            <label className="form-label">Confirm Password</label>
+            <label className="form-label" htmlFor="register-confirm-password">Confirm password</label>
             <input
+              id="register-confirm-password"
+              name="confirmPassword"
               type="password"
               className="form-control"
               value={confirmPassword}
@@ -117,31 +128,23 @@ export default function Register() {
             className="btn btn-primary w-100"
             disabled={busy}
           >
-            {busy ? "Creating account..." : "Create Account"}
+            {busy ? "Creating account…" : "Create Account"}
           </button>
         </form>
       </div>
 
       {/* Success Modal Overlay */}
       {showModal && (
-        <div className="modal d-block bg-dark bg-opacity-50" tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-body text-center p-5">
-                <h4 className="text-success mb-3">
-                  Account Created Successfully!
-                </h4>
-                <p>Your account is ready. Please log in to continue.</p>
-                <button
-                  className="btn btn-primary px-4 mt-3"
-                  onClick={() => navigate("/login")}
-                >
-                  Go to Login
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Account Created Successfully"
+          variant="success"
+          confirmLabel="Go to Login"
+          hideCancel
+          onConfirm={() => navigate("/login")}
+          onCancel={() => navigate("/login")}
+        >
+          <p className="mb-0">Your account is ready. Log in to continue.</p>
+        </ConfirmModal>
       )}
     </div>
   );

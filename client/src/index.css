@@ -1,0 +1,239 @@
+@layer utilities;
+
+/* Tailwind is available for layout utilities only. Bootstrap owns component styling. */
+@import "tailwindcss/utilities.css" layer(utilities);
+
+:root {
+  --dl-primary: #075985;
+  --dl-primary-hover: #06496d;
+  --dl-primary-soft: #e8f4f8;
+  --dl-secondary: #52616b;
+  --dl-secondary-hover: #414e56;
+  --dl-success: #26734d;
+  --dl-success-hover: #1e5b3d;
+  --dl-warning: #f4c95d;
+  --dl-warning-soft: #fff7dc;
+  --dl-warning-text: #5c4300;
+  --dl-danger: #b42318;
+  --dl-danger-hover: #8f1c13;
+  --dl-info-soft: #e7f3f8;
+  --dl-info-text: #164e63;
+  --dl-surface: #ffffff;
+  --dl-page: #f6f9fa;
+  --dl-border: #d5e0e5;
+  --bs-primary: var(--dl-primary);
+  --bs-primary-rgb: 7, 89, 133;
+  --bs-secondary: var(--dl-secondary);
+  --bs-secondary-rgb: 82, 97, 107;
+  --bs-success: var(--dl-success);
+  --bs-success-rgb: 38, 115, 77;
+  --bs-warning: var(--dl-warning);
+  --bs-warning-rgb: 244, 201, 93;
+  --bs-danger: var(--dl-danger);
+  --bs-danger-rgb: 180, 35, 24;
+  --bs-body-color: #1f2d33;
+  --bs-body-bg: var(--dl-page);
+  --bs-border-color: var(--dl-border);
+  --bs-link-color: var(--dl-primary);
+  --bs-link-hover-color: var(--dl-primary-hover);
+}
+
+body {
+  background-color: var(--dl-page);
+}
+
+.app-main-container {
+  width: 100%;
+  max-width: 57.142857vw;
+  margin-inline: auto;
+}
+
+@media (orientation: portrait) {
+  .app-main-container {
+    max-width: none;
+  }
+}
+
+.navbar,
+.card,
+.modal-content,
+.list-group-item,
+.form-control,
+.form-select {
+  background-color: var(--dl-surface);
+}
+
+.navbar {
+  --bs-bg-opacity: 1;
+  background-color: #f1f7f9 !important;
+  border-color: var(--dl-border) !important;
+}
+
+.card,
+.modal-content {
+  border-color: var(--dl-border);
+}
+
+.text-primary {
+  color: var(--dl-primary) !important;
+}
+
+.text-secondary,
+.text-muted {
+  color: var(--dl-secondary) !important;
+}
+
+.text-danger {
+  color: var(--dl-danger) !important;
+}
+
+.text-warning-emphasis {
+  color: var(--dl-warning-text) !important;
+}
+
+.border-primary {
+  border-color: var(--dl-primary) !important;
+}
+
+.border-danger {
+  border-color: var(--dl-danger) !important;
+}
+
+.bg-primary,
+.badge.bg-primary {
+  background-color: var(--dl-primary) !important;
+}
+
+.bg-secondary,
+.badge.bg-secondary {
+  background-color: var(--dl-secondary) !important;
+}
+
+.bg-success,
+.badge.bg-success {
+  background-color: var(--dl-success) !important;
+}
+
+.bg-danger,
+.badge.bg-danger {
+  background-color: var(--dl-danger) !important;
+}
+
+.bg-warning,
+.badge.bg-warning {
+  background-color: var(--dl-warning) !important;
+  color: var(--dl-warning-text) !important;
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--dl-primary);
+  --bs-btn-border-color: var(--dl-primary);
+  --bs-btn-hover-bg: var(--dl-primary-hover);
+  --bs-btn-hover-border-color: var(--dl-primary-hover);
+  --bs-btn-active-bg: var(--dl-primary-hover);
+  --bs-btn-active-border-color: var(--dl-primary-hover);
+  --bs-btn-disabled-bg: var(--dl-primary);
+  --bs-btn-disabled-border-color: var(--dl-primary);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--dl-primary);
+  --bs-btn-border-color: var(--dl-primary);
+  --bs-btn-hover-bg: var(--dl-primary);
+  --bs-btn-hover-border-color: var(--dl-primary);
+  --bs-btn-active-bg: var(--dl-primary);
+  --bs-btn-active-border-color: var(--dl-primary);
+}
+
+.btn-secondary {
+  --bs-btn-bg: var(--dl-secondary);
+  --bs-btn-border-color: var(--dl-secondary);
+  --bs-btn-hover-bg: var(--dl-secondary-hover);
+  --bs-btn-hover-border-color: var(--dl-secondary-hover);
+  --bs-btn-active-bg: var(--dl-secondary-hover);
+  --bs-btn-active-border-color: var(--dl-secondary-hover);
+}
+
+.btn-outline-secondary {
+  --bs-btn-color: var(--dl-secondary);
+  --bs-btn-border-color: var(--dl-secondary);
+  --bs-btn-hover-bg: var(--dl-secondary);
+  --bs-btn-hover-border-color: var(--dl-secondary);
+  --bs-btn-active-bg: var(--dl-secondary);
+  --bs-btn-active-border-color: var(--dl-secondary);
+}
+
+.btn-success {
+  --bs-btn-bg: var(--dl-success);
+  --bs-btn-border-color: var(--dl-success);
+  --bs-btn-hover-bg: var(--dl-success-hover);
+  --bs-btn-hover-border-color: var(--dl-success-hover);
+  --bs-btn-active-bg: var(--dl-success-hover);
+  --bs-btn-active-border-color: var(--dl-success-hover);
+}
+
+.btn-danger {
+  --bs-btn-bg: var(--dl-danger);
+  --bs-btn-border-color: var(--dl-danger);
+  --bs-btn-hover-bg: var(--dl-danger-hover);
+  --bs-btn-hover-border-color: var(--dl-danger-hover);
+  --bs-btn-active-bg: var(--dl-danger-hover);
+  --bs-btn-active-border-color: var(--dl-danger-hover);
+}
+
+.btn-outline-danger {
+  --bs-btn-color: var(--dl-danger);
+  --bs-btn-border-color: var(--dl-danger);
+  --bs-btn-hover-bg: var(--dl-danger);
+  --bs-btn-hover-border-color: var(--dl-danger);
+  --bs-btn-active-bg: var(--dl-danger);
+  --bs-btn-active-border-color: var(--dl-danger);
+}
+
+.btn-warning {
+  --bs-btn-color: var(--dl-warning-text);
+  --bs-btn-bg: var(--dl-warning);
+  --bs-btn-border-color: var(--dl-warning);
+  --bs-btn-hover-color: #342600;
+  --bs-btn-hover-bg: #e6b942;
+  --bs-btn-hover-border-color: #e6b942;
+  --bs-btn-active-color: #342600;
+  --bs-btn-active-bg: #e6b942;
+  --bs-btn-active-border-color: #e6b942;
+}
+
+.alert-info {
+  --bs-alert-color: var(--dl-info-text);
+  --bs-alert-bg: var(--dl-info-soft);
+  --bs-alert-border-color: #b9dce8;
+}
+
+.alert-warning {
+  --bs-alert-color: var(--dl-warning-text);
+  --bs-alert-bg: var(--dl-warning-soft);
+  --bs-alert-border-color: #ead48d;
+}
+
+.nav-tabs .nav-link.active {
+  color: var(--dl-primary) !important;
+  border-top-color: var(--dl-primary);
+}
+
+.page-link {
+  color: var(--dl-primary);
+}
+
+.active > .page-link,
+.page-link.active {
+  background-color: var(--dl-primary);
+  border-color: var(--dl-primary);
+}
+
+.form-control:focus,
+.form-select:focus,
+.btn:focus-visible,
+.nav-link:focus-visible,
+.page-link:focus-visible {
+  border-color: #5aa6c8;
+  box-shadow: 0 0 0 0.25rem rgb(7 89 133 / 20%);
+}

@@ -12,7 +12,7 @@ export default function FlashMessage() {
 
   if (!flash) return null;
   return (
-    <div className={`alert alert-${flash.type || 'info'} alert-dismissible fade show`} role="alert">
+    <div className={`alert alert-${flash.type || 'info'} alert-dismissible fade show`} role="status" aria-live="polite">
       {flash.text}
       <button type="button" className="btn-close" aria-label="Close" onClick={() => setFlash(null)}></button>
     </div>

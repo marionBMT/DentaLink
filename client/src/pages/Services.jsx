@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api, { errorMessage } from "../api/axiosClient";
+import ConfirmModal from "../components/ConfirmModal";
 import { CONTACT_MESSAGE, isEmailOrPhone } from "../utils/validation";
 
 export default function Services() {
@@ -36,10 +37,6 @@ export default function Services() {
   useEffect(() => {
     loadServices();
   }, []);
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
   const handleAddService = async (e) => {
     e.preventDefault();
     setErrorMsg("");
@@ -139,9 +136,9 @@ export default function Services() {
 
   return (
     <div className="mt-4 position-relative">
-      <h3 className="mb-4">Services & Dentists Management</h3>
+      <h2 className="h3 mb-4">Services & Dentists Management</h2>
 
-      {errorMsg && <div className="alert alert-danger py-2">{errorMsg}</div>}
+      {errorMsg && <div className="alert alert-danger py-2" role="alert" aria-live="assertive">{errorMsg}</div>}
 
       <div className="row">
         <div className="col-md-4 mb-4">
@@ -149,14 +146,17 @@ export default function Services() {
             <h5 className="mb-3 border-bottom pb-2">Add New Service</h5>
             <form onSubmit={handleAddService}>
               <div className="mb-3">
-                <label className="form-label small">Service Name</label>
+                <label className="form-label small" htmlFor="new-service-name">Service name</label>
                 <input
-                  type="text"
+                  type="search"
+                  id="new-service-name"
+                  name="serviceName"
                   className="form-control"
                   required
                   value={newServiceName}
                   onChange={(e) => setNewServiceName(e.target.value)}
                   placeholder="e.g. Teeth Whitening"
+                  autoComplete="off"
                 />
               </div>
               <button type="submit" className="btn btn-primary w-100">
@@ -169,14 +169,21 @@ export default function Services() {
         <div className="col-md-8">
           <div className="card shadow-sm mb-4">
             <div className="card-header bg-white border-bottom pb-0">
-              <div className="d-flex justify-content-between align-items-center mb-3">
+              <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
                 <h5 className="mb-0">DentaLink Services</h5>
+                <label className="visually-hidden" htmlFor="service-search">Search services or dentists</label>
                 <input
                   type="text"
-                  className="form-control form-control-sm w-50"
-                  placeholder="Search service or dentist name..."
+                  id="service-search"
+                  name="serviceSearch"
+                  className="form-control form-control-sm"
+                  placeholder="Search service or dentist name…"
+                  autoComplete="off"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
                 />
               </div>
             </div>
@@ -191,10 +198,14 @@ export default function Services() {
                       <div className="card border-0 shadow-sm border-start border-4 border-primary">
                         <div className="card-header bg-white d-flex justify-content-between align-items-center">
                           {editService.id === service._id ? (
-                            <div className="d-flex gap-2 w-75">
+                            <div className="d-flex flex-column flex-sm-row gap-2 flex-grow-1">
+                              <label className="visually-hidden" htmlFor={`edit-service-${service._id}`}>Service name</label>
                               <input
+                                id={`edit-service-${service._id}`}
+                                name="editedServiceName"
                                 type="text"
                                 className="form-control form-control-sm"
+                                autoComplete="off"
                                 value={editService.name}
                                 onChange={(e) =>
                                   setEditService({
@@ -204,6 +215,7 @@ export default function Services() {
                                 }
                               />
                               <button
+                                type="button"
                                 onClick={() => {
                                   setModalAction({
                                     action: "update_service",
@@ -217,6 +229,7 @@ export default function Services() {
                                 Save
                               </button>
                               <button
+                                type="button"
                                 onClick={() =>
                                   setEditService({ id: null, name: "" })
                                 }
@@ -234,6 +247,7 @@ export default function Services() {
                           {editService.id !== service._id && (
                             <div className="d-flex gap-2">
                               <button
+                                type="button"
                                 onClick={() =>
                                   setEditService({
                                     id: service._id,
@@ -245,6 +259,7 @@ export default function Services() {
                                 Edit
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   setModalAction({
                                     action: "delete_service",
@@ -289,6 +304,7 @@ export default function Services() {
                                     </span>
                                   </div>
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setModalAction({
                                         action: "remove_dentist",
@@ -307,11 +323,16 @@ export default function Services() {
                             </ul>
                           )}
 
-                          <div className="d-flex gap-2 mt-2">
+                          <div className="row g-2 mt-1">
+                            <div className="col-12 col-lg-5">
+                              <label className="visually-hidden" htmlFor={`dentist-name-${service._id}`}>Dentist name</label>
                             <input
+                              id={`dentist-name-${service._id}`}
+                              name="dentistName"
                               type="text"
                               className="form-control form-control-sm"
                               placeholder="Dr. Full Name"
+                              autoComplete="off"
                               value={dentistForms[service._id]?.name || ""}
                               onChange={(e) =>
                                 handleDentistChange(
@@ -321,10 +342,16 @@ export default function Services() {
                                 )
                               }
                             />
+                            </div>
+                            <div className="col-12 col-lg-5">
+                              <label className="visually-hidden" htmlFor={`dentist-contact-${service._id}`}>Dentist contact</label>
                             <input
+                              id={`dentist-contact-${service._id}`}
+                              name="dentistContact"
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Contact (Email/Num)"
+                              placeholder="Email or phone number"
+                              autoComplete="off"
                               value={dentistForms[service._id]?.contact || ""}
                               onChange={(e) =>
                                 handleDentistChange(
@@ -334,12 +361,16 @@ export default function Services() {
                                 )
                               }
                             />
+                            </div>
+                            <div className="col-12 col-lg-2 d-grid">
                             <button
+                              type="button"
                               onClick={() => promptAddDentist(service._id)}
                               className="btn btn-sm btn-primary px-3"
                             >
                               Add
                             </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -347,14 +378,16 @@ export default function Services() {
                   ))}
 
                   {totalPages > 1 && (
-                    <nav className="mt-4">
+                    <nav className="mt-4" aria-label="Service pages">
                       <ul className="pagination justify-content-center">
                         <li
                           className={`page-item ${currentPage === 1 ? "disabled" : ""}`}
                         >
                           <button
+                            type="button"
                             onClick={() => setCurrentPage(currentPage - 1)}
                             className="page-link"
+                            disabled={currentPage === 1}
                           >
                             Previous
                           </button>
@@ -365,8 +398,11 @@ export default function Services() {
                             className={`page-item ${currentPage === i + 1 ? "active" : ""}`}
                           >
                             <button
+                              type="button"
                               onClick={() => setCurrentPage(i + 1)}
                               className="page-link"
+                              aria-current={currentPage === i + 1 ? "page" : undefined}
+                              aria-label={`Go to page ${i + 1}`}
                             >
                               {i + 1}
                             </button>
@@ -376,8 +412,10 @@ export default function Services() {
                           className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}
                         >
                           <button
+                            type="button"
                             onClick={() => setCurrentPage(currentPage + 1)}
                             className="page-link"
+                            disabled={currentPage === totalPages}
                           >
                             Next
                           </button>
@@ -393,58 +431,21 @@ export default function Services() {
       </div>
 
       {showModal && (
-        <>
-          <div
-            className="modal-backdrop fade show"
-            style={{ zIndex: 1040 }}
-          ></div>
-          <div
-            className="modal fade show d-block"
-            tabIndex="-1"
-            style={{ zIndex: 1050 }}
-          >
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content shadow">
-                <div
-                  className={`modal-header text-white ${modalAction.action.includes("delete") || modalAction.action.includes("remove") ? "bg-danger" : "bg-warning text-dark"}`}
-                >
-                  <h5 className="modal-title">Confirm Action</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <p className="mb-0">
-                    {modalAction.action === "delete_service" &&
-                      `Are you sure you want to completely delete "${modalAction.serviceName}"? All assigned dentists will also be removed.`}
-                    {modalAction.action === "update_service" &&
-                      "Are you sure you want to rename this service? It will update for all patients."}
-                    {modalAction.action === "remove_dentist" &&
-                      `Are you sure you want to unassign ${modalAction.payload} from this service?`}
-                  </p>
-                </div>
-                <div className="modal-footer bg-light">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn px-4 ${modalAction.action.includes("delete") || modalAction.action.includes("remove") ? "btn-danger" : "btn-warning"}`}
-                    onClick={executeModalAction}
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
+        <ConfirmModal
+          title="Confirm Action"
+          variant={modalAction.action.includes("delete") || modalAction.action.includes("remove") ? "danger" : "warning"}
+          onConfirm={executeModalAction}
+          onCancel={() => setShowModal(false)}
+        >
+          <p className="mb-0">
+            {modalAction.action === "delete_service" &&
+              `Are you sure you want to completely delete “${modalAction.serviceName}”? All assigned dentists will also be removed.`}
+            {modalAction.action === "update_service" &&
+              "Are you sure you want to rename this service? It will update for all patients."}
+            {modalAction.action === "remove_dentist" &&
+              `Are you sure you want to unassign ${modalAction.payload} from this service?`}
+          </p>
+        </ConfirmModal>
       )}
     </div>
   );

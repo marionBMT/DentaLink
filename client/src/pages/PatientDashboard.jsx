@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api, { errorMessage } from '../api/axiosClient';
 import { openCancellationProof } from '../utils/proofs';
+import {
+  APPOINTMENT_TIME_SLOTS,
+  appointmentStatusClass,
+  formatAppointmentStatus,
+  formatAppointmentTime,
+} from '../utils/appointments';
 
 export default function PatientDashboard() {
   const [appointments, setAppointments] = useState([]);
@@ -20,6 +26,7 @@ export default function PatientDashboard() {
   const [bookingBusy, setBookingBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState({ id: null, type: '' });
   const [hasPending, setHasPending] = useState(false);
+  const cancelFileInputRef = useRef(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -27,29 +34,6 @@ export default function PatientDashboard() {
 
   // Get current date in Manila time for the date picker minimum
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
-
-  // Generate 8:00 AM to 6:00 PM time slots in 30-min intervals
-  const generateTimeSlots = () => {
-    const slots = [];
-    for (let i = 8; i <= 18; i++) {
-      const hour24 = i.toString().padStart(2, '0');
-      const hour12 = i > 12 ? i - 12 : i;
-      const ampm = i >= 12 ? 'PM' : 'AM';
-      slots.push({ value: `${hour24}:00`, label: `${hour12}:00 ${ampm}` });
-      if (i !== 18) slots.push({ value: `${hour24}:30`, label: `${hour12}:30 ${ampm}` });
-    }
-    return slots;
-  };
-  const timeSlots = generateTimeSlots();
-
-  const formatTimeFriendly = (timeString) => {
-    if (!timeString) return '';
-    const [hour, minute] = timeString.split(':');
-    let h = parseInt(hour, 10);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12; 
-    return `${timeString} (${h}:${minute} ${ampm})`;
-  };
 
   const loadAppointments = useCallback(async (page = currentPage) => {
     try {
@@ -205,22 +189,22 @@ export default function PatientDashboard() {
     <div className="row mt-4">
       <div className="col-md-5 mb-4">
         <div className="card shadow-sm p-4">
-          <h3 className="mb-3">Request Appointment</h3>
-          {message.text && <div className={`alert alert-${message.type}`}>{message.text}</div>}
+          <h1 className="h3 mb-3">Request Appointment</h1>
+          {message.text && <div className={`alert alert-${message.type}`} role={message.type === 'danger' ? 'alert' : 'status'} aria-live="polite">{message.text}</div>}
           
           <form onSubmit={handleBook}>
             <div className="mb-3">
-              <label className="form-label">Service Required</label>
-              <select className="form-select" value={serviceType} onChange={handleServiceChange} disabled={hasPending || bookingBusy}>
-                {availableServices.length === 0 && <option value="">Loading services...</option>}
+              <label className="form-label" htmlFor="appointment-service">Service required</label>
+              <select id="appointment-service" name="serviceType" className="form-select" value={serviceType} onChange={handleServiceChange} disabled={hasPending || bookingBusy}>
+                {availableServices.length === 0 && <option value="">Loading services…</option>}
                 {availableServices.map(s => (
                   <option key={s._id} value={s.name}>{s.name}</option>
                 ))}
               </select>
             </div>
             <div className="mb-3">
-              <label className="form-label">Select Dentist</label>
-              <select className="form-select" value={dentistName} onChange={(e) => setDentistName(e.target.value)} required disabled={hasPending || bookingBusy || availableDentists.length === 0}>
+              <label className="form-label" htmlFor="appointment-dentist">Select dentist</label>
+              <select id="appointment-dentist" name="dentistName" className="form-select" value={dentistName} onChange={(e) => setDentistName(e.target.value)} required disabled={hasPending || bookingBusy || availableDentists.length === 0}>
                 {availableDentists.length === 0 ? (
                   <option value="" disabled>No dentists assigned</option>
                 ) : (
@@ -231,30 +215,28 @@ export default function PatientDashboard() {
               </select>
             </div>
             <div className="mb-3">
-              <label className="form-label">Preferred Date</label>
+              <label className="form-label" htmlFor="appointment-date">Preferred date</label>
               {/* min={today} prevents selecting past dates */}
-              <input type="date" className="form-control" min={today} value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} required disabled={hasPending || bookingBusy} />
+              <input id="appointment-date" name="requestedDate" type="date" className="form-control" min={today} value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} required disabled={hasPending || bookingBusy} />
             </div>
             <div className="mb-3">
-              <label className="form-label">Preferred Time (8 AM - 6 PM)</label>
-              <select className="form-select" value={requestedTime} onChange={(e) => setRequestedTime(e.target.value)} required disabled={hasPending || bookingBusy}>
+              <label className="form-label" htmlFor="appointment-time">Preferred time (8 AM–6 PM)</label>
+              <select id="appointment-time" name="requestedTime" className="form-select" value={requestedTime} onChange={(e) => setRequestedTime(e.target.value)} required disabled={hasPending || bookingBusy}>
                 <option value="" disabled>Select a time</option>
-                {timeSlots.map(slot => (
-                  <option key={slot.value} value={slot.value}>{slot.label}</option>
-                ))}
+                {APPOINTMENT_TIME_SLOTS.map(slot => <option key={slot.value} value={slot.value}>{slot.label}</option>)}
               </select>
             </div>
             <button type="submit" className="btn btn-primary w-100" disabled={hasPending || bookingBusy || availableServices.length === 0}>
-              {bookingBusy ? 'Submitting...' : hasPending ? 'Action Pending Admin Review' : 'Submit Request'}
+              {bookingBusy ? 'Submitting…' : hasPending ? 'Action Pending Admin Review' : 'Submit Request'}
             </button>
           </form>
         </div>
       </div>
 
       <div className="col-md-7">
-        <h3 className="mb-3">My Appointments</h3>
+        <h2 className="h3 mb-3">My Appointments</h2>
         {appointments.length === 0 ? (
-          <p className="text-muted">You have no appointments yet.</p>
+          <p className="text-muted">No appointments found.</p>
         ) : (
           <div className="list-group shadow-sm">
             {appointments.map((appt) => (
@@ -263,34 +245,30 @@ export default function PatientDashboard() {
                   <h5 className="mb-0 text-primary">
                     {appt.serviceType} <span className="text-dark fw-normal small">- {appt.dentistName}</span>
                   </h5>
-                  <span className={`badge ${
-                    appt.status === 'Confirmed' ? 'bg-success' : 
-                    appt.status.includes('Counter') ? 'bg-warning text-dark' : 
-                    appt.status.includes('Cancel') || appt.status === 'Rejected' ? 'bg-danger' : 'bg-secondary'
-                  }`}>
-                    {appt.status.replace(/_/g, ' ')}
+                  <span className={`badge ${appointmentStatusClass(appt.status)}`}>
+                    {formatAppointmentStatus(appt.status)}
                   </span>
                 </div>
                 
                 {appt.status === 'Admin_Counter_Offer' ? (
                   <div className="alert alert-warning p-2 mt-2 mb-0">
                     <strong>Admin suggested a new time:</strong><br />
-                    Date: {appt.adminSuggestedDate} | Time: {formatTimeFriendly(appt.adminSuggestedTime)}<br />
+                    Date: {appt.adminSuggestedDate} | Time: {formatAppointmentTime(appt.adminSuggestedTime)}<br />
                     <small className="mb-2 d-block">Remarks: {appt.adminRemarks}</small>
                     
                     {actionId !== appt._id && (
                       <div className="d-flex flex-wrap gap-2 mt-2">
-                        <button onClick={() => handleAcceptOffer(appt._id, appt)} className="btn btn-sm btn-success" disabled={actionBusy.id === appt._id}>
-                          {actionBusy.id === appt._id && actionBusy.type === 'accept' ? 'Accepting...' : 'Accept Time'}
+                        <button type="button" onClick={() => handleAcceptOffer(appt._id, appt)} className="btn btn-sm btn-success" disabled={actionBusy.id === appt._id}>
+                          {actionBusy.id === appt._id && actionBusy.type === 'accept' ? 'Accepting…' : 'Accept Time'}
                         </button>
-                        <button onClick={() => { setActionId(appt._id); setActionType('counter'); }} className="btn btn-sm btn-outline-dark" disabled={actionBusy.id === appt._id}>Request Another Option</button>
-                        <button onClick={() => { setActionId(appt._id); setActionType('cancel'); }} className="btn btn-sm btn-danger" disabled={actionBusy.id === appt._id}>Request Cancellation</button>
+                        <button type="button" onClick={() => { setActionId(appt._id); setActionType('counter'); }} className="btn btn-sm btn-outline-secondary" disabled={actionBusy.id === appt._id}>Request Another Option</button>
+                        <button type="button" onClick={() => { setActionId(appt._id); setActionType('cancel'); }} className="btn btn-sm btn-outline-danger" disabled={actionBusy.id === appt._id}>Request Cancellation</button>
                       </div>
                     )}
                   </div>
                 ) : (
                   <p className="mb-2 text-muted">
-                    Requested for: <strong>{appt.requestedDate}</strong> at <strong>{formatTimeFriendly(appt.requestedTime)}</strong>
+                    Requested for: <strong>{appt.requestedDate}</strong> at <strong>{formatAppointmentTime(appt.requestedTime)}</strong>
                   </p>
                 )}
 
@@ -329,39 +307,41 @@ export default function PatientDashboard() {
                 {appt.status === 'Admin_Counter_Offer' && (
                   <div className="alert alert-warning p-2 mt-2 mb-2">
                     <small>
-                      <strong>Counter Offer:</strong> {appt.adminSuggestedDate} at {formatTimeFriendly(appt.adminSuggestedTime)}
+                      <strong>Counter Offer:</strong> {appt.adminSuggestedDate} at {formatAppointmentTime(appt.adminSuggestedTime)}
                     </small>
                   </div>
                 )}
 
                 {appt.status === 'Pending_Admin_Approval' && (
-                  <button onClick={() => handleDirectCancel(appt._id)} className="btn btn-sm btn-outline-danger mt-2" disabled={actionBusy.id === appt._id}>
-                    {actionBusy.id === appt._id && actionBusy.type === 'cancel' ? 'Cancelling...' : 'Cancel Pending Request'}
+                  <button type="button" onClick={() => handleDirectCancel(appt._id)} className="btn btn-sm btn-outline-danger mt-2" disabled={actionBusy.id === appt._id}>
+                    {actionBusy.id === appt._id && actionBusy.type === 'cancel' ? 'Cancelling…' : 'Cancel Pending Request'}
                   </button>
                 )}
 
                 {appt.status === 'Confirmed' && actionId !== appt._id && (
-                  <button onClick={() => { setActionId(appt._id); setActionType('cancel'); }} className="btn btn-sm btn-outline-danger mt-2">Request Cancellation</button>
+                  <button type="button" onClick={() => { setActionId(appt._id); setActionType('cancel'); }} className="btn btn-sm btn-outline-danger mt-2">Request Cancellation</button>
                 )}
 
                 {actionId === appt._id && (
                   <form onSubmit={(e) => submitPatientAction(e, appt._id)} className="mt-3 p-3 border rounded bg-light">
                     <h6>{actionType === 'cancel' ? 'Reason for Cancellation' : 'Suggest a New Time / Message'}</h6>
                     <div className="mb-2">
-                      <input type="text" className="form-control form-control-sm" required
+                      <label className="visually-hidden" htmlFor={`patient-remark-${appt._id}`}>Appointment message</label>
+                      <input id={`patient-remark-${appt._id}`} name="patientRemark" type="text" className="form-control form-control-sm" required autoComplete="off"
                         placeholder={actionType === 'cancel' ? 'Why do you need to cancel?' : 'E.g., Can we do Friday afternoon?'}
                         value={patientRemark} onChange={(e) => setPatientRemark(e.target.value)} />
                     </div>
 
                     {actionType === 'cancel' && (
                       <div className="mb-3">
-                        <label className="form-label small fw-bold">Upload Proof (Optional, Max 5MB)</label>
+                        <label className="form-label small fw-bold" htmlFor="cancelFileInput">Upload proof <span className="fw-normal text-muted">(optional, max 5 MB)</span></label>
                         
                         {/* Display the File Error if it exists */}
                         {fileError && <div className="alert alert-danger py-1 px-2 small mb-2">{fileError}</div>}
                         
                         <div className="d-flex align-items-center gap-2">
                           <input 
+                            ref={cancelFileInputRef}
                             type="file" 
                             className="form-control form-control-sm" 
                             accept=".jpg,.jpeg,.png,.pdf" 
@@ -373,10 +353,11 @@ export default function PatientDashboard() {
                             <button 
                               type="button" 
                               className="btn btn-sm btn-outline-danger" 
+                              aria-label="Remove selected proof file"
                               onClick={() => {
                                 setCancelFile(null);
                                 setFileError('');
-                                document.getElementById('cancelFileInput').value = null; // Clear input UI
+                                if (cancelFileInputRef.current) cancelFileInputRef.current.value = '';
                               }}
                             >
                               ✕
@@ -389,7 +370,7 @@ export default function PatientDashboard() {
 
                     <div className="d-flex gap-2">
                       <button type="submit" className="btn btn-sm btn-primary" disabled={actionBusy.id === appt._id}>
-                        {actionBusy.id === appt._id && actionBusy.type === 'submit' ? 'Sending...' : 'Send to Admin'}
+                        {actionBusy.id === appt._id && actionBusy.type === 'submit' ? 'Sending…' : 'Send to Admin'}
                       </button>
                       <button type="button" onClick={() => { setActionId(null); setPatientRemark(''); setCancelFile(null); setFileError(''); }} className="btn btn-sm btn-secondary" disabled={actionBusy.id === appt._id}>Go Back</button>
                     </div>
@@ -398,18 +379,18 @@ export default function PatientDashboard() {
               </div>
             ))}
             {totalPages > 1 && (
-              <nav className="mt-4">
+              <nav className="mt-4" aria-label="Appointment history pages">
                 <ul className="pagination justify-content-center">
                   <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                    <button onClick={() => setCurrentPage(currentPage - 1)} className="page-link">Previous</button>
+                    <button type="button" onClick={() => setCurrentPage(currentPage - 1)} className="page-link" disabled={currentPage === 1}>Previous</button>
                   </li>
                   {[...Array(totalPages)].map((_, i) => (
                     <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
-                      <button onClick={() => setCurrentPage(i + 1)} className="page-link">{i + 1}</button>
+                      <button type="button" onClick={() => setCurrentPage(i + 1)} className="page-link" aria-current={currentPage === i + 1 ? 'page' : undefined} aria-label={`Go to page ${i + 1}`}>{i + 1}</button>
                     </li>
                   ))}
                   <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                    <button onClick={() => setCurrentPage(currentPage + 1)} className="page-link">Next</button>
+                    <button type="button" onClick={() => setCurrentPage(currentPage + 1)} className="page-link" disabled={currentPage === totalPages}>Next</button>
                   </li>
                 </ul>
               </nav>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import api from "./api/axiosClient";
 import FlashMessage from "./components/FlashMessage";
+import ConfirmModal from "./components/ConfirmModal";
 import NotFound from "./components/NotFound";
 import { GuestRoute, ProtectedRoute } from "./components/RouteGuards";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -16,8 +17,6 @@ function App() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
-  // Re-read the session whenever another part of the app changes it
-  // (Profile dispatches a 'storage' event after the name is edited).
   const [session, setSession] = useState(getSession);
 
   useEffect(() => {
@@ -45,163 +44,92 @@ function App() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    // Revoke the token on the server. If that fails (offline, already expired)
-    // the user is still logged out locally.
     try {
       await api.post("/auth/logout", null, { skipForceLogout: true });
     } catch {
-      /* ignore */
+      /* The local session is still cleared if the server is unavailable. */
     }
     endSession({ message: "You have been logged out.", type: "success" });
   };
 
   if (!sessionReady) {
-    return <div className="container py-5 text-center">Loading DentaLink...</div>;
+    return (
+      <div className="container py-5 text-center" role="status" aria-live="polite">
+        <div className="spinner-border text-primary mb-3" aria-hidden="true"></div>
+        <div>Loading DentaLink…</div>
+      </div>
+    );
   }
 
   return (
     <Router>
-      <nav className="navbar navbar-expand-lg navbar-light bg-light px-4">
-        <Link className="navbar-brand fw-bold text-primary" to="/">
-          DentaLink
-        </Link>
-        <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
-          {!authenticated ? (
-            <>
-              <Link className="btn btn-outline-dark" to="/">
-                Home
-              </Link>
-              <Link className="btn btn-outline-primary" to="/login">
-                Log In
-              </Link>
-              <Link className="btn btn-primary" to="/register">
-                Sign Up
-              </Link>
-            </>
-          ) : (
-            <>
-              <span className="me-2 fw-bold">Hello, {name}</span>
-              <Link className="btn btn-outline-primary" to="/profile">
-                My Profile
-              </Link>
-              {role === "admin" && (
-                <Link className="btn btn-outline-dark" to="/admin">
-                  Admin Board
-                </Link>
-              )}
-              {role === "patient" && (
-                <Link className="btn btn-outline-dark" to="/dashboard">
-                  My Appointments
-                </Link>
-              )}
-              {/* Opens a confirmation modal instead of logging out immediately */}
-              <button
-                onClick={() => setShowLogoutModal(true)}
-                className="btn btn-danger"
-              >
-                Log Out
-              </button>
-            </>
-          )}
+      <a className="visually-hidden-focusable position-absolute top-0 start-0 p-2 bg-white" href="#main-content">
+        Skip to main content
+      </a>
+
+      <nav className="navbar navbar-expand-lg navbar-light bg-light border-bottom px-3" aria-label="Primary navigation">
+        <div className="container-xl">
+          <Link className="navbar-brand fw-bold text-primary" to="/">DentaLink</Link>
+          <div className="ms-auto d-flex flex-wrap justify-content-end align-items-center gap-2 py-2">
+            {!authenticated ? (
+              <>
+                <Link className="btn btn-outline-secondary" to="/">Home</Link>
+                <Link className="btn btn-outline-primary" to="/login">Log In</Link>
+                <Link className="btn btn-primary" to="/register">Sign Up</Link>
+              </>
+            ) : (
+              <>
+                <span className="me-2 fw-bold">Hello, {name}</span>
+                <Link className="btn btn-outline-primary" to="/profile">My Profile</Link>
+                {role === "admin" && <Link className="btn btn-outline-secondary" to="/admin">Admin Board</Link>}
+                {role === "patient" && <Link className="btn btn-outline-secondary" to="/dashboard">My Appointments</Link>}
+                <button type="button" onClick={() => setShowLogoutModal(true)} className="btn btn-danger">Log Out</button>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
-      <div className="container mt-4">
+      <main id="main-content" className="app-main-container mt-4 px-3" tabIndex="-1">
         <FlashMessage />
         <Routes>
           <Route
             path="/"
             element={
-              <h2 className="text-center mt-5">
-                Welcome to DentaLink - Your Link to a Better Smile
-              </h2>
+              <section className="text-center py-5" aria-labelledby="home-title">
+                <h1 id="home-title" className="display-5 fw-bold text-primary mb-3">Welcome to DentaLink</h1>
+                <p className="lead mb-4">Your Link to a Better Smile</p>
+                {!authenticated && (
+                  <div className="d-flex flex-wrap justify-content-center gap-2">
+                    <Link className="btn btn-primary" to="/register">Create an Account</Link>
+                    <Link className="btn btn-outline-primary" to="/login">Log In</Link>
+                  </div>
+                )}
+              </section>
             }
           />
-
-          <Route
-            path="/login"
-            element={
-              <GuestRoute>
-                <Login />
-              </GuestRoute>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <GuestRoute>
-                <Register />
-              </GuestRoute>
-            }
-          />
-          <Route
-            path="/forgot-password"
-            element={
-              <GuestRoute>
-                <ForgotPassword />
-              </GuestRoute>
-            }
-          />
-
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute role="patient">
-                <PatientDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute role="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-
+          <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+          <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute role="patient"><PatientDashboard /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </div>
+      </main>
 
-      {/* Logout Confirmation Modal */}
       {showLogoutModal && (
-        <div className="modal d-block bg-dark bg-opacity-50" tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-body text-center p-4">
-                <h5 className="mb-4">Confirm Logout</h5>
-                <p className="text-muted mb-4">
-                  Are you sure you want to logout?
-                </p>
-                <div className="d-flex justify-content-center gap-3">
-                  <button
-                    className="btn btn-secondary px-4"
-                    onClick={() => setShowLogoutModal(false)}
-                    disabled={loggingOut}
-                  >
-                    Back
-                  </button>
-                  <button
-                    className="btn btn-danger px-4"
-                    onClick={handleLogout}
-                    disabled={loggingOut}
-                  >
-                    {loggingOut ? "Logging out..." : "Yes"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Confirm Logout"
+          variant="danger"
+          confirmLabel="Log Out"
+          cancelLabel="Back"
+          busy={loggingOut}
+          onConfirm={handleLogout}
+          onCancel={() => setShowLogoutModal(false)}
+        >
+          <p className="mb-0">Are you sure you want to log out of DentaLink?</p>
+        </ConfirmModal>
       )}
     </Router>
   );

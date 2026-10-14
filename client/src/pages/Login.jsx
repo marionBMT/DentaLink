@@ -78,28 +78,33 @@ export default function Login() {
   return (
     <div className="row justify-content-center mt-5">
       <div className="col-md-6 col-lg-4">
-        <h2 className="text-center mb-4">Log In</h2>
-        {error && <div className="alert alert-danger">{error}</div>}
+        <h1 className="h2 text-center mb-4">Log in to DentaLink</h1>
+        {error && <div className="alert alert-danger" role="alert" aria-live="assertive">{error}</div>}
         {otpMessage && showOtp && (
-          <div className="alert alert-success">{otpMessage}</div>
+          <div className="alert alert-success" role="status" aria-live="polite">{otpMessage}</div>
         )}
 
         {!showOtp ? (
           <form onSubmit={handleLogin} className="card p-4 shadow-sm">
             <div className="mb-3">
-              <label className="form-label">Username or Email</label>
+              <label className="form-label" htmlFor="login-identifier">Username or email</label>
               <input
+                id="login-identifier"
+                name="identifier"
                 type="text"
                 className="form-control"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
+                spellCheck={false}
                 autoComplete="username"
               />
             </div>
             <div className="mb-3">
-              <label className="form-label">Password</label>
+              <label className="form-label" htmlFor="login-password">Password</label>
               <input
+                id="login-password"
+                name="password"
                 type="password"
                 className="form-control"
                 value={password}
@@ -121,7 +126,7 @@ export default function Login() {
               className="btn btn-primary w-100"
               disabled={busy}
             >
-              {busy ? "Checking..." : "Log In"}
+              {busy ? "Checking…" : "Log In"}
             </button>
           </form>
         ) : (
@@ -131,11 +136,13 @@ export default function Login() {
           >
             <h5 className="text-center mb-3">Two-Step Verification</h5>
             <div className="mb-3">
-              <label className="form-label text-center d-block">
+              <label className="form-label text-center d-block" htmlFor="login-otp">
                 Enter 6-Digit Code
               </label>
               <input
                 type="text"
+                id="login-otp"
+                name="otp"
                 inputMode="numeric"
                 pattern="\d{6}"
                 className="form-control form-control-lg text-center fw-bold"
@@ -143,8 +150,8 @@ export default function Login() {
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
                 required
-                autoFocus
                 autoComplete="one-time-code"
+                spellCheck={false}
               />
             </div>
             <button
@@ -152,7 +159,7 @@ export default function Login() {
               className="btn btn-primary w-100"
               disabled={busy || otpCode.length !== 6}
             >
-              {busy ? "Verifying..." : "Verify & Continue"}
+              {busy ? "Verifying…" : "Verify & Continue"}
             </button>
             <button
               type="button"

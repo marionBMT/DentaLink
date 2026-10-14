@@ -2,7 +2,9 @@ import axios from "axios";
 import { endSession, getSession } from "../utils/session";
 
 // Set VITE_API_URL in client/.env for any environment other than local dev.
-const api = axios.create({ baseURL: 'https://dentalink-backend-34zx.onrender.com/api' });
+const api = axios.create({ 
+  baseURL: 'https://dentalink-backend-34zx.onrender.com/api' 
+});
 
 // The JWT is an httpOnly cookie. Mutating cookie-authenticated requests also
 // carry the matching double-submit CSRF token.

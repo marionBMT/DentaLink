@@ -2,9 +2,15 @@
   "name": "server",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node seed.js",
+    "check-data": "node scripts/check-data.js",
+    "migrate:proofs": "node scripts/migrate-proofs-private.js",
+    "smoke:external": "node scripts/smoke-external.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
@@ -12,14 +18,17 @@
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "cloudinary": "^1.41.3",
+    "cloudinary": "^2.11.0",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.4",
     "multer": "^2.4.0",
-    "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^10.0.14"
   }
 }

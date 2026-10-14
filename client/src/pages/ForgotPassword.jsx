@@ -1,64 +1,92 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import api from '../api/axiosClient';
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import api, { errorMessage } from "../api/axiosClient";
+import ConfirmModal from "../components/ConfirmModal";
+import { setFlash } from "../utils/session";
+import { PASSWORD_MESSAGE, PASSWORD_REGEX } from "../utils/validation";
 
 export default function ForgotPassword() {
   const [step, setStep] = useState(1);
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [busy, setBusy] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  
-  const navigate = useNavigate();
+  const [modalError, setModalError] = useState("");
 
   const handleSendOtp = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
+    setBusy(true);
     try {
-      // Backend needs an endpoint to send password reset OTP
-      await api.post('/auth/forgot-password', { email });
+      const res = await api.post("/auth/forgot-password", {
+        email: email.trim(),
+      });
+      // The server answers identically for registered and unknown emails
+      setInfo(res.data.message);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.message || 'Email not found');
+      setError(errorMessage(err, "Could not send the code"));
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
+    setBusy(true);
     try {
-      await api.post('/auth/verify-reset-otp', { email, otp });
+      await api.post("/auth/verify-reset-otp", {
+        email: email.trim(),
+        otp: otp.trim(),
+      });
+      setInfo("");
       setStep(3);
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP');
+      setError(errorMessage(err, "Invalid OTP"));
+    } finally {
+      setBusy(false);
     }
   };
 
   const initiatePasswordChange = (e) => {
     e.preventDefault();
-    setError('');
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+])[A-Za-z\d!@#$%^&*()_+]{8,}$/;
-    
-    if (!passwordRegex.test(newPassword)) {
-      setError("Password does not meet complexity requirements.");
+    setError("");
+
+    if (!PASSWORD_REGEX.test(newPassword)) {
+      setError(PASSWORD_MESSAGE);
       return;
     }
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
+    setModalError("");
     setShowConfirmModal(true);
   };
 
   const executePasswordChange = async () => {
+    setBusy(true);
+    setModalError("");
     try {
-      await api.post('/auth/reset-password', { email, newPassword });
-      navigate('/login');
+      // The OTP is sent again: the server re-checks it before changing anything
+      await api.post("/auth/reset-password", {
+        email: email.trim(),
+        otp: otp.trim(),
+        newPassword,
+      });
+      setFlash(
+        "success",
+        "Password changed successfully. Please log in with your new password.",
+      );
+      window.location.assign("/login"); // full load so the flash banner is shown
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to change password');
-      setShowConfirmModal(false);
+      setModalError(errorMessage(err, "Failed to change password"));
+      setBusy(false);
     }
   };
 
@@ -67,27 +95,69 @@ export default function ForgotPassword() {
       <div className="col-md-6 col-lg-4">
         <h2 className="text-center mb-4">Password Recovery</h2>
         {error && <div className="alert alert-danger">{error}</div>}
-        
+        {info && <div className="alert alert-info">{info}</div>}
+
         <div className="card p-4 shadow-sm">
           {step === 1 && (
             <form onSubmit={handleSendOtp}>
               <div className="mb-3">
                 <label className="form-label">Enter your Email</label>
-                <input type="email" className="form-control" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <input
+                  type="email"
+                  className="form-control"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
               </div>
-              <button type="submit" className="btn btn-primary w-100 mb-3">Send OTP</button>
-              <Link to="/login" className="btn btn-link w-100 text-decoration-none">Remember password?</Link>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 mb-3"
+                disabled={busy}
+              >
+                {busy ? "Sending..." : "Send OTP"}
+              </button>
+              <Link
+                to="/login"
+                className="btn btn-link w-100 text-decoration-none"
+              >
+                Remember password?
+              </Link>
             </form>
           )}
 
           {step === 2 && (
             <form onSubmit={handleVerifyOtp}>
               <div className="mb-3">
-                <label className="form-label text-center d-block">Enter OTP</label>
-                <input type="text" className="form-control text-center letter-spacing-2" maxLength="6" value={otp} onChange={(e) => setOtp(e.target.value)} required />
+                <label className="form-label text-center d-block">
+                  Enter OTP
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="form-control text-center"
+                  maxLength="6"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  required
+                  autoFocus
+                  autoComplete="one-time-code"
+                />
               </div>
-              <button type="submit" className="btn btn-primary w-100 mb-3">Verify OTP</button>
-              <Link to="/login" className="btn btn-link w-100 text-decoration-none">Remember password?</Link>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 mb-3"
+                disabled={busy || otp.length !== 6}
+              >
+                {busy ? "Verifying..." : "Verify OTP"}
+              </button>
+              <Link
+                to="/login"
+                className="btn btn-link w-100 text-decoration-none"
+              >
+                Remember password?
+              </Link>
             </form>
           )}
 
@@ -95,35 +165,56 @@ export default function ForgotPassword() {
             <form onSubmit={initiatePasswordChange}>
               <div className="mb-3">
                 <label className="form-label">New Password</label>
-                <input type="password" className="form-control" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                <input
+                  type="password"
+                  className="form-control"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                />
+                <small className="text-muted">{PASSWORD_MESSAGE}</small>
               </div>
               <div className="mb-3">
                 <label className="form-label">Confirm New Password</label>
-                <input type="password" className="form-control" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                <input
+                  type="password"
+                  className="form-control"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                />
               </div>
-              <button type="submit" className="btn btn-primary w-100 mb-3">Change Password</button>
-              <Link to="/login" className="btn btn-link w-100 text-decoration-none">Remember password?</Link>
+              <button type="submit" className="btn btn-primary w-100 mb-3">
+                Change Password
+              </button>
+              <Link
+                to="/login"
+                className="btn btn-link w-100 text-decoration-none"
+              >
+                Remember password?
+              </Link>
             </form>
           )}
         </div>
       </div>
 
-      {/* Confirmation Modal */}
       {showConfirmModal && (
-        <div className="modal d-block bg-dark bg-opacity-50" tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-body text-center p-4">
-                <h5 className="mb-4">Confirm Change Password?</h5>
-                <p className="text-muted mb-4">Are you sure you want to update your password?</p>
-                <div className="d-flex justify-content-center gap-3">
-                  <button className="btn btn-secondary px-4" onClick={() => setShowConfirmModal(false)}>Back</button>
-                  <button className="btn btn-primary px-4" onClick={executePasswordChange}>Confirm</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Confirm Change Password?"
+          variant="primary"
+          confirmLabel="Confirm"
+          cancelLabel="Back"
+          busy={busy}
+          error={modalError}
+          onConfirm={executePasswordChange}
+          onCancel={() => setShowConfirmModal(false)}
+        >
+          <p className="mb-0 text-muted">
+            Are you sure you want to update your password?
+          </p>
+        </ConfirmModal>
       )}
     </div>
   );

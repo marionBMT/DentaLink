@@ -1,55 +1,174 @@
-import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import PatientDashboard from './pages/PatientDashboard';
-import AdminDashboard from './pages/AdminDashboard';
-import Profile from './pages/Profile';
-import ForgotPassword from './pages/ForgotPassword';
+import { useEffect, useState } from "react";
+import { Link, Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import api from "./api/axiosClient";
+import FlashMessage from "./components/FlashMessage";
+import NotFound from "./components/NotFound";
+import { GuestRoute, ProtectedRoute } from "./components/RouteGuards";
+import AdminDashboard from "./pages/AdminDashboard";
+import ForgotPassword from "./pages/ForgotPassword";
+import Login from "./pages/Login";
+import PatientDashboard from "./pages/PatientDashboard";
+import Profile from "./pages/Profile";
+import Register from "./pages/Register";
+import { clearSession, endSession, getSession, saveSession } from "./utils/session";
 
 function App() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const token = localStorage.getItem('token');
-  const role = localStorage.getItem('role');
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  // Re-read the session whenever another part of the app changes it
+  // (Profile dispatches a 'storage' event after the name is edited).
+  const [session, setSession] = useState(getSession);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = '/login';
+  useEffect(() => {
+    const refresh = () => setSession(getSession());
+    window.addEventListener("dentalink-session", refresh);
+    return () => window.removeEventListener("dentalink-session", refresh);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.get("/auth/session", { skipForceLogout: true })
+      .then((res) => {
+        if (active) saveSession(res.data);
+      })
+      .catch(() => {
+        if (active) clearSession();
+      })
+      .finally(() => {
+        if (active) setSessionReady(true);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const { authenticated, role, name } = session;
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    // Revoke the token on the server. If that fails (offline, already expired)
+    // the user is still logged out locally.
+    try {
+      await api.post("/auth/logout", null, { skipForceLogout: true });
+    } catch {
+      /* ignore */
+    }
+    endSession({ message: "You have been logged out.", type: "success" });
   };
+
+  if (!sessionReady) {
+    return <div className="container py-5 text-center">Loading DentaLink...</div>;
+  }
 
   return (
     <Router>
       <nav className="navbar navbar-expand-lg navbar-light bg-light px-4">
-        <Link className="navbar-brand fw-bold text-primary" to="/">DentaLink</Link>
-        <div className="ms-auto">
-          {!token ? (
+        <Link className="navbar-brand fw-bold text-primary" to="/">
+          DentaLink
+        </Link>
+        <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
+          {!authenticated ? (
             <>
-              <Link className="btn btn-outline-dark me-2" to="/">Home</Link>
-              <Link className="btn btn-outline-primary me-2" to="/login">Log In</Link>
-              <Link className="btn btn-primary" to="/register">Sign Up</Link>
+              <Link className="btn btn-outline-dark" to="/">
+                Home
+              </Link>
+              <Link className="btn btn-outline-primary" to="/login">
+                Log In
+              </Link>
+              <Link className="btn btn-primary" to="/register">
+                Sign Up
+              </Link>
             </>
           ) : (
             <>
-              <span className="me-3 fw-bold">Hello, {localStorage.getItem('name')}</span>
-              <Link className="btn btn-outline-primary me-2" to="/profile">My Profile</Link>
-              {role === 'admin' && <Link className="btn btn-outline-dark me-2" to="/admin">Admin Board</Link>}
-              {role === 'patient' && <Link className="btn btn-outline-dark me-2" to="/dashboard">My Appointments</Link>}
-              {/* This button now opens the modal instead of logging out immediately */}
-              <button onClick={() => setShowLogoutModal(true)} className="btn btn-danger">Log Out</button>
+              <span className="me-2 fw-bold">Hello, {name}</span>
+              <Link className="btn btn-outline-primary" to="/profile">
+                My Profile
+              </Link>
+              {role === "admin" && (
+                <Link className="btn btn-outline-dark" to="/admin">
+                  Admin Board
+                </Link>
+              )}
+              {role === "patient" && (
+                <Link className="btn btn-outline-dark" to="/dashboard">
+                  My Appointments
+                </Link>
+              )}
+              {/* Opens a confirmation modal instead of logging out immediately */}
+              <button
+                onClick={() => setShowLogoutModal(true)}
+                className="btn btn-danger"
+              >
+                Log Out
+              </button>
             </>
           )}
         </div>
       </nav>
 
       <div className="container mt-4">
+        <FlashMessage />
         <Routes>
-          <Route path="/" element={<h2 className="text-center mt-5">Welcome to DentaLink - Your Link to a Better Smile</h2>} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/dashboard" element={<PatientDashboard />} /> 
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route
+            path="/"
+            element={
+              <h2 className="text-center mt-5">
+                Welcome to DentaLink - Your Link to a Better Smile
+              </h2>
+            }
+          />
+
+          <Route
+            path="/login"
+            element={
+              <GuestRoute>
+                <Login />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <GuestRoute>
+                <Register />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <GuestRoute>
+                <ForgotPassword />
+              </GuestRoute>
+            }
+          />
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute role="patient">
+                <PatientDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
 
@@ -60,10 +179,24 @@ function App() {
             <div className="modal-content">
               <div className="modal-body text-center p-4">
                 <h5 className="mb-4">Confirm Logout</h5>
-                <p className="text-muted mb-4">Are you sure you want to logout?</p>
+                <p className="text-muted mb-4">
+                  Are you sure you want to logout?
+                </p>
                 <div className="d-flex justify-content-center gap-3">
-                  <button className="btn btn-secondary px-4" onClick={() => setShowLogoutModal(false)}>Back</button>
-                  <button className="btn btn-danger px-4" onClick={handleLogout}>Yes</button>
+                  <button
+                    className="btn btn-secondary px-4"
+                    onClick={() => setShowLogoutModal(false)}
+                    disabled={loggingOut}
+                  >
+                    Back
+                  </button>
+                  <button
+                    className="btn btn-danger px-4"
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                  >
+                    {loggingOut ? "Logging out..." : "Yes"}
+                  </button>
                 </div>
               </div>
             </div>

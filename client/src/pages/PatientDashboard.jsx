@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import api from '../api/axiosClient';
+import { useState, useEffect, useCallback } from 'react';
+import api, { errorMessage } from '../api/axiosClient';
+import { openCancellationProof } from '../utils/proofs';
 
 export default function PatientDashboard() {
   const [appointments, setAppointments] = useState([]);
@@ -16,8 +17,12 @@ export default function PatientDashboard() {
 
   const [cancelFile, setCancelFile] = useState(null);
   const [fileError, setFileError] = useState('');
+  const [bookingBusy, setBookingBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState({ id: null, type: '' });
+  const [hasPending, setHasPending] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const appointmentsPerPage = 4;
 
   // Get current date in Manila time for the date picker minimum
@@ -46,38 +51,48 @@ export default function PatientDashboard() {
     return `${timeString} (${h}:${minute} ${ampm})`;
   };
 
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async (page = currentPage) => {
     try {
-      const res = await api.get('/appointments');
+      const res = await api.get('/appointments', {
+        params: { page, limit: appointmentsPerPage },
+      });
+      const pages = Number(res.headers['x-total-pages']) || 1;
+      if (page > pages) {
+        setCurrentPage(pages);
+        return;
+      }
       setAppointments(res.data);
+      setTotalPages(pages);
+      setHasPending(res.headers['x-has-pending'] === 'true');
     } catch (err) {
-      console.error("Failed to load appointments", err);
+      setMessage({ type: 'danger', text: errorMessage(err, 'Failed to load appointments.') });
     }
-  };
+  }, [currentPage]);
 
-  const loadServices = async () => {
+  const loadServices = useCallback(async () => {
     try {
       const res = await api.get('/services');
       setAvailableServices(res.data);
-      if (res.data.length > 0) setServiceType(res.data[0].name);
-    } catch (err) { console.error("Failed to load services", err); }
-  };
-
-  useEffect(() => { 
-    loadAppointments(); 
-    loadServices(); 
+      const firstService = res.data[0];
+      setServiceType(firstService?.name || '');
+      setDentistName(firstService?.dentists?.[0]?.name || '');
+    } catch (err) {
+      setMessage({ type: 'danger', text: errorMessage(err, 'Failed to load services.') });
+    }
   }, []);
+
+  useEffect(() => { loadAppointments(); }, [loadAppointments]);
+  useEffect(() => { loadServices(); }, [loadServices]);
 
   const selectedServiceObj = availableServices.find(s => s.name === serviceType);
   const availableDentists = selectedServiceObj ? selectedServiceObj.dentists : [];
 
-  useEffect(() => {
-    if (availableDentists.length > 0) {
-      setDentistName(availableDentists[0].name);
-    } else {
-      setDentistName('');
-    }
-  }, [serviceType, availableDentists]);
+  const handleServiceChange = (e) => {
+    const nextServiceName = e.target.value;
+    const nextService = availableServices.find((service) => service.name === nextServiceName);
+    setServiceType(nextServiceName);
+    setDentistName(nextService?.dentists?.[0]?.name || '');
+  };
 
   const handleBook = async (e) => {
     e.preventDefault();
@@ -87,6 +102,7 @@ export default function PatientDashboard() {
       return;
     }
 
+    setBookingBusy(true);
     try {
       await api.post('/appointments', { serviceType, dentistName, requestedDate, requestedTime });
       setMessage({ type: 'success', text: 'Appointment requested successfully! Waiting for admin approval.' });
@@ -95,11 +111,15 @@ export default function PatientDashboard() {
       setCurrentPage(1);
       loadAppointments();
     } catch (err) {
-      setMessage({ type: 'danger', text: err.response?.data?.message || 'Failed to book appointment.' });
+      setMessage({ type: 'danger', text: errorMessage(err, 'Failed to book appointment.') });
+    } finally {
+      setBookingBusy(false);
     }
   };
 
   const handleAcceptOffer = async (id, appt) => {
+    setMessage({ type: '', text: '' });
+    setActionBusy({ id, type: 'accept' });
     try {
       await api.put(`/appointments/${id}`, {
         status: 'Confirmed',
@@ -108,14 +128,24 @@ export default function PatientDashboard() {
         patientRemarks: '' 
       });
       loadAppointments();
-    } catch (err) { console.error("Failed to accept", err); }
+    } catch (err) {
+      setMessage({ type: 'danger', text: errorMessage(err, 'Failed to accept the offered time.') });
+    } finally {
+      setActionBusy({ id: null, type: '' });
+    }
   };
 
   const handleDirectCancel = async (id) => {
+    setMessage({ type: '', text: '' });
+    setActionBusy({ id, type: 'cancel' });
     try {
       await api.put(`/appointments/${id}`, { status: 'Cancelled', patientRemarks: 'Cancelled by patient.' });
       loadAppointments();
-    } catch (err) { console.error("Failed to cancel", err); }
+    } catch (err) {
+      setMessage({ type: 'danger', text: errorMessage(err, 'Failed to cancel the pending request.') });
+    } finally {
+      setActionBusy({ id: null, type: '' });
+    }
   };
 
   const handleFileChange = (e) => {
@@ -140,6 +170,8 @@ export default function PatientDashboard() {
 
   const submitPatientAction = async (e, id) => {
     e.preventDefault();
+    setMessage({ type: '', text: '' });
+    setActionBusy({ id, type: 'submit' });
     try {
       const newStatus = actionType === 'cancel' ? 'Cancellation_Requested' : 'Patient_Counter_Offer';
       
@@ -162,17 +194,12 @@ export default function PatientDashboard() {
       setPatientRemark('');
       setCancelFile(null); // Clear the file state
       loadAppointments();
-    } catch (err) { console.error("Failed to submit action", err); }
+    } catch (err) {
+      setMessage({ type: 'danger', text: errorMessage(err, 'Failed to send your request to the admin.') });
+    } finally {
+      setActionBusy({ id: null, type: '' });
+    }
   };
-
-  const hasPending = appointments.some(appt => 
-    ['Pending_Admin_Approval', 'Patient_Counter_Offer', 'Cancellation_Requested'].includes(appt.status)
-  );
-
-  const indexOfLastAppt = currentPage * appointmentsPerPage;
-  const indexOfFirstAppt = indexOfLastAppt - appointmentsPerPage;
-  const currentAppointments = appointments.slice(indexOfFirstAppt, indexOfLastAppt);
-  const totalPages = Math.ceil(appointments.length / appointmentsPerPage);
 
   return (
     <div className="row mt-4">
@@ -184,7 +211,7 @@ export default function PatientDashboard() {
           <form onSubmit={handleBook}>
             <div className="mb-3">
               <label className="form-label">Service Required</label>
-              <select className="form-select" value={serviceType} onChange={(e) => setServiceType(e.target.value)} disabled={hasPending}>
+              <select className="form-select" value={serviceType} onChange={handleServiceChange} disabled={hasPending || bookingBusy}>
                 {availableServices.length === 0 && <option value="">Loading services...</option>}
                 {availableServices.map(s => (
                   <option key={s._id} value={s.name}>{s.name}</option>
@@ -193,7 +220,7 @@ export default function PatientDashboard() {
             </div>
             <div className="mb-3">
               <label className="form-label">Select Dentist</label>
-              <select className="form-select" value={dentistName} onChange={(e) => setDentistName(e.target.value)} required disabled={hasPending || availableDentists.length === 0}>
+              <select className="form-select" value={dentistName} onChange={(e) => setDentistName(e.target.value)} required disabled={hasPending || bookingBusy || availableDentists.length === 0}>
                 {availableDentists.length === 0 ? (
                   <option value="" disabled>No dentists assigned</option>
                 ) : (
@@ -206,19 +233,19 @@ export default function PatientDashboard() {
             <div className="mb-3">
               <label className="form-label">Preferred Date</label>
               {/* min={today} prevents selecting past dates */}
-              <input type="date" className="form-control" min={today} value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} required disabled={hasPending} />
+              <input type="date" className="form-control" min={today} value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} required disabled={hasPending || bookingBusy} />
             </div>
             <div className="mb-3">
               <label className="form-label">Preferred Time (8 AM - 6 PM)</label>
-              <select className="form-select" value={requestedTime} onChange={(e) => setRequestedTime(e.target.value)} required disabled={hasPending}>
+              <select className="form-select" value={requestedTime} onChange={(e) => setRequestedTime(e.target.value)} required disabled={hasPending || bookingBusy}>
                 <option value="" disabled>Select a time</option>
                 {timeSlots.map(slot => (
                   <option key={slot.value} value={slot.value}>{slot.label}</option>
                 ))}
               </select>
             </div>
-            <button type="submit" className="btn btn-primary w-100" disabled={hasPending || availableServices.length === 0}>
-              {hasPending ? 'Action Pending Admin Review' : 'Submit Request'}
+            <button type="submit" className="btn btn-primary w-100" disabled={hasPending || bookingBusy || availableServices.length === 0}>
+              {bookingBusy ? 'Submitting...' : hasPending ? 'Action Pending Admin Review' : 'Submit Request'}
             </button>
           </form>
         </div>
@@ -230,7 +257,7 @@ export default function PatientDashboard() {
           <p className="text-muted">You have no appointments yet.</p>
         ) : (
           <div className="list-group shadow-sm">
-            {currentAppointments.map((appt) => (
+            {appointments.map((appt) => (
               <div key={appt._id} className="list-group-item p-3 mb-2 border rounded">
                 <div className="d-flex justify-content-between align-items-center mb-2">
                   <h5 className="mb-0 text-primary">
@@ -253,9 +280,11 @@ export default function PatientDashboard() {
                     
                     {actionId !== appt._id && (
                       <div className="d-flex flex-wrap gap-2 mt-2">
-                        <button onClick={() => handleAcceptOffer(appt._id, appt)} className="btn btn-sm btn-success">Accept Time</button>
-                        <button onClick={() => { setActionId(appt._id); setActionType('counter'); }} className="btn btn-sm btn-outline-dark">Request Another Option</button>
-                        <button onClick={() => { setActionId(appt._id); setActionType('cancel'); }} className="btn btn-sm btn-danger">Request Cancellation</button>
+                        <button onClick={() => handleAcceptOffer(appt._id, appt)} className="btn btn-sm btn-success" disabled={actionBusy.id === appt._id}>
+                          {actionBusy.id === appt._id && actionBusy.type === 'accept' ? 'Accepting...' : 'Accept Time'}
+                        </button>
+                        <button onClick={() => { setActionId(appt._id); setActionType('counter'); }} className="btn btn-sm btn-outline-dark" disabled={actionBusy.id === appt._id}>Request Another Option</button>
+                        <button onClick={() => { setActionId(appt._id); setActionType('cancel'); }} className="btn btn-sm btn-danger" disabled={actionBusy.id === appt._id}>Request Cancellation</button>
                       </div>
                     )}
                   </div>
@@ -271,16 +300,18 @@ export default function PatientDashboard() {
                 )}
 
                 {/* NEW: Show Patient's Uploaded Proof */}
-                {appt.cancellationProofUrl && (
+                {appt.hasCancellationProof && (
                   <div className="mb-2">
-                    <a 
-                      href={appt.cancellationProofUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <button
+                      type="button"
+                      onClick={() => openCancellationProof(
+                        appt._id,
+                        (text) => setMessage({ type: 'danger', text }),
+                      )}
                       className="btn btn-sm btn-outline-info fw-bold"
                     >
                       View Attached Proof
-                    </a>
+                    </button>
                   </div>
                 )}
                 
@@ -304,7 +335,9 @@ export default function PatientDashboard() {
                 )}
 
                 {appt.status === 'Pending_Admin_Approval' && (
-                  <button onClick={() => handleDirectCancel(appt._id)} className="btn btn-sm btn-outline-danger mt-2">Cancel Pending Request</button>
+                  <button onClick={() => handleDirectCancel(appt._id)} className="btn btn-sm btn-outline-danger mt-2" disabled={actionBusy.id === appt._id}>
+                    {actionBusy.id === appt._id && actionBusy.type === 'cancel' ? 'Cancelling...' : 'Cancel Pending Request'}
+                  </button>
                 )}
 
                 {appt.status === 'Confirmed' && actionId !== appt._id && (
@@ -355,8 +388,10 @@ export default function PatientDashboard() {
                     )}
 
                     <div className="d-flex gap-2">
-                      <button type="submit" className="btn btn-sm btn-primary">Send to Admin</button>
-                      <button type="button" onClick={() => { setActionId(null); setPatientRemark(''); setCancelFile(null); setFileError(''); }} className="btn btn-sm btn-secondary">Go Back</button>
+                      <button type="submit" className="btn btn-sm btn-primary" disabled={actionBusy.id === appt._id}>
+                        {actionBusy.id === appt._id && actionBusy.type === 'submit' ? 'Sending...' : 'Send to Admin'}
+                      </button>
+                      <button type="button" onClick={() => { setActionId(null); setPatientRemark(''); setCancelFile(null); setFileError(''); }} className="btn btn-sm btn-secondary" disabled={actionBusy.id === appt._id}>Go Back</button>
                     </div>
                   </form>
                 )}

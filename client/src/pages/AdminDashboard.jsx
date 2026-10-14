@@ -1,10 +1,19 @@
-import { useState, useEffect } from 'react';
-import api from '../api/axiosClient';
+import { useState, useEffect, useCallback } from 'react';
+import api, { errorMessage } from '../api/axiosClient';
+import ConfirmModal from '../components/ConfirmModal';
+import { getCurrentUserId } from '../utils/session';
+import {
+  validateAccountFields,
+  isEmailOrPhone,
+  CONTACT_MESSAGE,
+} from '../utils/validation';
 import ServicesTab from './Services';
+import { openCancellationProof } from '../utils/proofs';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('appointments'); 
-  
+  const [activeTab, setActiveTab] = useState('appointments');
+  const currentUserId = getCurrentUserId();
+
   // --- APPOINTMENT STATES ---
   const [appointments, setAppointments] = useState([]);
   const [counterId, setCounterId] = useState(null);
@@ -15,6 +24,7 @@ export default function AdminDashboard() {
   const [keepReason, setKeepReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const appointmentsPerPage = 4;
 
   // --- USER MANAGEMENT STATES ---
@@ -22,21 +32,35 @@ export default function AdminDashboard() {
   const [newUser, setNewUser] = useState({ username: '', name: '', email: '', password: '', confirmPassword: '', role: 'patient' });
   const [userError, setUserError] = useState('');
   const [userSuccess, setUserSuccess] = useState('');
-  
+
   // USER SEARCH & PAGINATION STATES
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userCurrentPage, setUserCurrentPage] = useState(1);
+  const [totalUserPages, setTotalUserPages] = useState(1);
   const usersPerPage = 7;
+
+  // ARCHIVE LISTS USE THEIR OWN SERVER-SIDE PAGES
+  const [archivedUsers, setArchivedUsers] = useState([]);
+  const [archivedAppointments, setArchivedAppointments] = useState([]);
+  const [archivedUserPage, setArchivedUserPage] = useState(1);
+  const [archivedAppointmentPage, setArchivedAppointmentPage] = useState(1);
+  const [archivedUserPages, setArchivedUserPages] = useState(1);
+  const [archivedAppointmentPages, setArchivedAppointmentPages] = useState(1);
+  const archivePageSize = 5;
 
   // --- DYNAMIC MODAL STATES ---
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [itemToProcess, setItemToProcess] = useState({ type: '', id: '', role: '', action: '' });
-  
+
   // ARCHIVE FORM STATES
   const [archiveForm, setArchiveForm] = useState({ reason: '', contact: '' });
-  const [archiveError, setArchiveError] = useState('');
+  const [modalError, setModalError] = useState('');
+  const [modalBusy, setModalBusy] = useState(false);
 
-  // --- NEW: CONFLICT & TIME FORMATTING ---
+  // --- ACTION ERROR BANNER (server errors for list updates, creates, etc.) ---
+  const [actionError, setActionError] = useState('');
+
+  // --- CONFLICT & TIME FORMATTING ---
   const [conflictError, setConflictError] = useState('');
 
   const formatTimeFriendly = (timeString) => {
@@ -48,51 +72,108 @@ export default function AdminDashboard() {
     return `${timeString} (${h}:${minute} ${ampm})`;
   };
 
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async (page = currentPage, search = searchTerm) => {
     try {
-      const res = await api.get('/appointments');
+      const res = await api.get('/appointments', {
+        params: { page, limit: appointmentsPerPage, archived: false, search: search.trim() || undefined },
+      });
+      const pages = Number(res.headers['x-total-pages']) || 1;
+      if (page > pages) {
+        setCurrentPage(pages);
+        return;
+      }
       setAppointments(res.data);
-    } catch (err) { console.error("Failed to load appointments", err); }
-  };
+      setTotalPages(pages);
+      setActionError('');
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to load appointments.'));
+    }
+  }, [currentPage, searchTerm]);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async (page = userCurrentPage, search = userSearchTerm) => {
     try {
-      const res = await api.get('/users');
+      const res = await api.get('/users', {
+        params: { page, limit: usersPerPage, archived: false, search: search.trim() || undefined },
+      });
+      const pages = Number(res.headers['x-total-pages']) || 1;
+      if (page > pages) {
+        setUserCurrentPage(pages);
+        return;
+      }
       setUsers(res.data);
-    } catch (err) { console.error("Failed to load users", err); }
-  };
+      setTotalUserPages(pages);
+      setActionError('');
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to load users.'));
+    }
+  }, [userCurrentPage, userSearchTerm]);
 
-  useEffect(() => { 
-    loadAppointments();
-    loadUsers();
-  }, []);
+  const loadArchivedUsers = useCallback(async (page = archivedUserPage) => {
+    try {
+      const res = await api.get('/users', {
+        params: { page, limit: archivePageSize, archived: true },
+      });
+      const pages = Number(res.headers['x-total-pages']) || 1;
+      if (page > pages) {
+        setArchivedUserPage(pages);
+        return;
+      }
+      setArchivedUsers(res.data);
+      setArchivedUserPages(pages);
+      setActionError('');
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to load archived users.'));
+    }
+  }, [archivedUserPage]);
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
-  useEffect(() => { setUserCurrentPage(1); }, [userSearchTerm]);
+  const loadArchivedAppointments = useCallback(async (page = archivedAppointmentPage) => {
+    try {
+      const res = await api.get('/appointments', {
+        params: { page, limit: archivePageSize, archived: true },
+      });
+      const pages = Number(res.headers['x-total-pages']) || 1;
+      if (page > pages) {
+        setArchivedAppointmentPage(pages);
+        return;
+      }
+      setArchivedAppointments(res.data);
+      setArchivedAppointmentPages(pages);
+      setActionError('');
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to load archived appointments.'));
+    }
+  }, [archivedAppointmentPage]);
+
+  useEffect(() => { loadAppointments(); }, [loadAppointments]);
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+  useEffect(() => { loadArchivedUsers(); }, [loadArchivedUsers]);
+  useEffect(() => { loadArchivedAppointments(); }, [loadArchivedAppointments]);
 
   const handleAction = async (id, status) => {
     try {
       await api.put(`/appointments/${id}`, { status });
       loadAppointments();
-    } catch (err) { console.error("Failed to update status", err); }
+      setActionError('');
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setConflictError(errorMessage(err));
+      } else {
+        setActionError(errorMessage(err, 'Failed to update appointment status.'));
+      }
+    }
+  };
+
+  const unlockLogin = async (user) => {
+    setActionError('');
+    try {
+      await api.post(`/users/${user._id}/unlock-login`);
+      setUserSuccess(`Login lock cleared for ${user.name}.`);
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to clear the login lock.'));
+    }
   };
 
   const handleApprove = (appt) => {
-    // Check if the doctor already has a confirmed appointment at this exact date & time
-    const hasConflict = appointments.some(existing => 
-      existing._id !== appt._id &&
-      existing.status === 'Confirmed' &&
-      !existing.isArchived &&
-      existing.dentistName === appt.dentistName &&
-      existing.requestedDate === appt.requestedDate &&
-      existing.requestedTime === appt.requestedTime
-    );
-
-    if (hasConflict) {
-      setConflictError(`Schedule Conflict: ${appt.dentistName} is already booked on ${appt.requestedDate} at ${formatTimeFriendly(appt.requestedTime)}.`);
-      return;
-    }
-    
     handleAction(appt._id, 'Confirmed');
   };
 
@@ -103,7 +184,10 @@ export default function AdminDashboard() {
       setRejectId(null);
       setRejectReason('');
       loadAppointments();
-    } catch (err) { console.error("Failed to reject", err); }
+      setActionError('');
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to reject this request.'));
+    }
   };
 
   const submitKeep = async (e, appt) => {
@@ -112,14 +196,21 @@ export default function AdminDashboard() {
       const isFromCounter = appt.adminSuggestedDate && (appt.requestedDate !== appt.adminSuggestedDate || appt.requestedTime !== appt.adminSuggestedTime);
       const revertedStatus = isFromCounter ? 'Admin_Counter_Offer' : 'Confirmed';
 
-      await api.put(`/appointments/${appt._id}`, { 
-        status: revertedStatus, 
+      await api.put(`/appointments/${appt._id}`, {
+        status: revertedStatus,
         adminRemarks: keepReason // Save the reason they were denied cancellation
       });
       setKeepId(null);
       setKeepReason('');
       loadAppointments();
-    } catch (err) { console.error("Failed to keep appointment", err); }
+      setActionError('');
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setConflictError(errorMessage(err));
+      } else {
+        setActionError(errorMessage(err, 'Failed to keep this appointment.'));
+      }
+    }
   };
 
   const submitCounter = async (e) => {
@@ -134,58 +225,62 @@ export default function AdminDashboard() {
       setCounterId(null);
       setCounterForm({ date: '', time: '', remarks: '' });
       loadAppointments();
-    } catch (err) { console.error("Failed to submit counter offer", err); }
-  };
-
-  const validateForm = () => {
-    if (newUser.username.length < 8 || newUser.username.length > 13) {
-      return "Username must be between 8 and 13 characters.";
+      setActionError('');
+    } catch (err) {
+      setActionError(errorMessage(err, 'Failed to submit counter offer.'));
     }
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+])[A-Za-z\d!@#$\%^&*()_+]{8,}$/;
-    if (!passwordRegex.test(newUser.password)) {
-      return "Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.";
-    }
-    if (newUser.password !== newUser.confirmPassword) {
-      return "Passwords do not match.";
-    }
-    return null;
   };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setUserError('');
     setUserSuccess('');
-
-    const validationError = validateForm();
+    const validationError = validateAccountFields(newUser);
     if (validationError) {
       setUserError(validationError);
       return;
     }
 
     try {
-      await api.post('/users', newUser);
-      setUserSuccess(`${newUser.role === 'admin' ? 'Admin' : 'Patient'} account created!`);
+      await api.post('/users', {
+        username: newUser.username.trim(),
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        password: newUser.password,
+        role: newUser.role,
+      });
+      setUserSuccess(`${newUser.role === 'admin' ? 'Admin' : 'Patient'} account created successfully!`);
       setNewUser({ username: '', name: '', email: '', password: '', confirmPassword: '', role: 'patient' });
       loadUsers();
     } catch (err) {
-      setUserError(err.response?.data?.message || 'Failed to create account');
+      setUserError(errorMessage(err, 'Failed to create account.'));
     }
+  };
+
+  const openConfirm = (item) => {
+    setItemToProcess(item);
+    setArchiveForm({ reason: '', contact: '' });
+    setModalError('');
+    setModalBusy(false);
+    setShowConfirmModal(true);
   };
 
   const executeModalAction = async () => {
     const { type, id, action } = itemToProcess;
-    
+
     if (action === 'archive') {
       if (!archiveForm.reason.trim()) {
-        setArchiveError("Please provide a reason for archiving this record.");
+        setModalError('Please provide a reason for archiving this record.');
         return;
       }
-      const contactRegex = /^([a-zA-Z0-9_\.\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-\.]+|^[0-9\-\+]{9,15})$/;
-      if (!contactRegex.test(archiveForm.contact.trim())) {
-        setArchiveError("Please provide a valid email address or phone number.");
+      if (!isEmailOrPhone(archiveForm.contact)) {
+        setModalError(CONTACT_MESSAGE);
         return;
       }
     }
+
+    setModalBusy(true);
+    setModalError('');
 
     try {
       if (action === 'delete') {
@@ -202,11 +297,21 @@ export default function AdminDashboard() {
         await api.put(`/${type}s/${id}/archive`, payload);
       }
       
-      if (type === 'user') loadUsers();
-      if (type === 'appointment') loadAppointments();
-      
-    } catch (err) { console.error(`Failed to ${action}`, err); }
-    setShowConfirmModal(false);
+      if (type === 'user') {
+        loadUsers();
+        loadArchivedUsers();
+      } else {
+        loadAppointments();
+        loadArchivedAppointments();
+      }
+
+      setShowConfirmModal(false);
+      setActionError('');
+    } catch (err) {
+      setModalError(errorMessage(err, `Failed to ${action} this record.`));
+    } finally {
+      setModalBusy(false);
+    }
   };
   
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -224,40 +329,15 @@ export default function AdminDashboard() {
   };
   const timeSlots = generateTimeSlots();
 
-  const activeAppointments = appointments.filter(appt => !appt.isArchived);
-  const archivedAppointments = appointments.filter(appt => appt.isArchived);
-
-  const filteredAppointments = activeAppointments.filter(appt => {
-    const search = searchTerm.toLowerCase();
-    return (appt.patient?.name?.toLowerCase() || '').includes(search) || 
-           (appt.patient?.email?.toLowerCase() || '').includes(search) || 
-           (appt.serviceType?.toLowerCase() || '').includes(search) ||
-           (appt.dentistName?.toLowerCase() || '').includes(search); // NEW: Search Dentist
-  });
-
-  const indexOfLastAppt = currentPage * appointmentsPerPage;
-  const indexOfFirstAppt = indexOfLastAppt - appointmentsPerPage;
-  const currentAppointments = filteredAppointments.slice(indexOfFirstAppt, indexOfLastAppt);
-  const totalPages = Math.ceil(filteredAppointments.length / appointmentsPerPage);
-
-  const activeUsers = users.filter(user => !user.isArchived);
-  const archivedUsers = users.filter(user => user.isArchived);
-
-  const filteredUsers = activeUsers.filter(user => {
-    const search = userSearchTerm.toLowerCase();
-    return (user.name?.toLowerCase() || '').includes(search) || 
-           (user.email?.toLowerCase() || '').includes(search) || 
-           (user.role?.toLowerCase() || '').includes(search);
-  });
-
-  const indexOfLastUser = userCurrentPage * usersPerPage;
-  const indexOfFirstUser = indexOfLastUser - usersPerPage;
-  const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
-  const totalUserPages = Math.ceil(filteredUsers.length / usersPerPage);
-
   return (
     <div className="mt-4 position-relative">
-      
+      {actionError && (
+        <div className="alert alert-danger alert-dismissible" role="alert">
+          {actionError}
+          <button type="button" className="btn-close" aria-label="Close" onClick={() => setActionError('')}></button>
+        </div>
+      )}
+
       <ul className="nav nav-tabs mb-4">
         <li className="nav-item">
           <button className={`nav-link fw-bold ${activeTab === 'appointments' ? 'active text-primary' : 'text-secondary'}`} 
@@ -290,14 +370,14 @@ export default function AdminDashboard() {
         <div>
           <div className="mb-4">
             <input type="text" className="form-control shadow-sm" placeholder="Search appointments or dentists..." 
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
           </div>
           
-          {filteredAppointments.length === 0 ? (
+          {appointments.length === 0 ? (
             <p className="text-muted">No appointments found.</p>
           ) : (
             <div className="row">
-              {currentAppointments.map((appt) => (
+              {appointments.map((appt) => (
                 <div key={appt._id} className="col-md-6 mb-3">
                   <div className="card shadow-sm h-100 border-0 border-start border-4 border-primary">
                     <div className="card-body">
@@ -316,12 +396,7 @@ export default function AdminDashboard() {
                             {appt.status.replace(/_/g, ' ')}
                           </span>
                           <button 
-                            onClick={() => { 
-                              setItemToProcess({ type: 'appointment', id: appt._id, action: 'archive' }); 
-                              setArchiveForm({ reason: '', contact: '' });
-                              setArchiveError('');
-                              setShowConfirmModal(true); 
-                            }} 
+                            onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'archive' })}
                             className="btn btn-sm btn-outline-warning px-2 py-0" title="Archive Record">Archive</button>
                         </div>
                       </div>
@@ -347,16 +422,15 @@ export default function AdminDashboard() {
                       )}
 
                       {/* --- NEW: VIEW CANCELLATION PROOF --- */}
-                      {appt.cancellationProofUrl && (
+                      {appt.hasCancellationProof && (
                         <div className="mb-3">
-                          <a 
-                            href={appt.cancellationProofUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
+                          <button
+                            type="button"
+                            onClick={() => openCancellationProof(appt._id, setActionError)}
                             className="btn btn-sm btn-outline-info fw-bold"
                           >
                             📄 View Attached Proof
-                          </a>
+                          </button>
                         </div>
                       )}
 
@@ -500,32 +574,35 @@ export default function AdminDashboard() {
               <div className="card-header bg-white border-bottom pb-0">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <h5 className="mb-0">Registered Users</h5>
-                  <input type="text" className="form-control form-control-sm w-50" placeholder="Search name, email, or role..." 
-                    value={userSearchTerm} onChange={(e) => setUserSearchTerm(e.target.value)} />
+                  <input type="text" className="form-control form-control-sm w-50" placeholder="Search name, email, or username..."
+                    value={userSearchTerm} onChange={(e) => { setUserSearchTerm(e.target.value); setUserCurrentPage(1); }} />
                 </div>
               </div>
               <div className="list-group list-group-flush">
-                {currentUsers.length === 0 ? (
+                {users.length === 0 ? (
                     <div className="p-4 text-center text-muted">No users found.</div>
                 ) : (
-                    currentUsers.map(user => (
+                    users.map(user => (
                     <div key={user._id} className="list-group-item d-flex justify-content-between align-items-center p-3">
                         <div>
                         <h6 className="mb-0 fw-bold">{user.name} <span className={`badge ms-2 ${user.role === 'admin' ? 'bg-dark' : 'bg-info'}`}>{user.role}</span></h6>
                         <small className="text-muted">{user.email}</small>
                         </div>
-                        {user.email !== 'marionbusinezz@gmail.com' && (
-                        <button 
-                            onClick={() => { 
-                              setItemToProcess({ type: 'user', id: user._id, role: user.role, action: 'archive' }); 
-                              setArchiveForm({ reason: '', contact: '' });
-                              setArchiveError('');
-                              setShowConfirmModal(true); 
-                            }} 
+                        <div className="d-flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => unlockLogin(user)}
+                            className="btn btn-sm btn-outline-secondary">
+                            Unlock Login
+                        </button>
+                        {user._id !== currentUserId && (
+                        <button
+                            onClick={() => openConfirm({ type: 'user', id: user._id, role: user.role, action: 'archive' })}
                             className="btn btn-sm btn-outline-warning">
                             Archive
                         </button>
                         )}
+                        </div>
                     </div>
                     ))
                 )}
@@ -567,12 +644,29 @@ export default function AdminDashboard() {
                       <small className="text-muted">{user.email}</small>
                     </div>
                     <div className="d-flex gap-2">
-                        <button onClick={() => { setItemToProcess({ type: 'user', id: user._id, action: 'restore' }); setShowConfirmModal(true); }} className="btn btn-sm btn-success">Restore</button>
-                        <button onClick={() => { setItemToProcess({ type: 'user', id: user._id, action: 'delete' }); setShowConfirmModal(true); }} className="btn btn-sm btn-danger">Delete</button>
+                        <button onClick={() => openConfirm({ type: 'user', id: user._id, action: 'restore' })} className="btn btn-sm btn-success">Restore</button>
+                        <button onClick={() => openConfirm({ type: 'user', id: user._id, action: 'delete' })} className="btn btn-sm btn-danger">Delete</button>
                     </div>
                   </div>
               ))}
             </div>
+            {archivedUserPages > 1 && (
+              <nav className="mt-3">
+                <ul className="pagination pagination-sm justify-content-center">
+                  <li className={`page-item ${archivedUserPage === 1 ? 'disabled' : ''}`}>
+                    <button className="page-link" onClick={() => setArchivedUserPage(archivedUserPage - 1)}>Previous</button>
+                  </li>
+                  {[...Array(archivedUserPages)].map((_, i) => (
+                    <li key={i + 1} className={`page-item ${archivedUserPage === i + 1 ? 'active' : ''}`}>
+                      <button className="page-link" onClick={() => setArchivedUserPage(i + 1)}>{i + 1}</button>
+                    </li>
+                  ))}
+                  <li className={`page-item ${archivedUserPage === archivedUserPages ? 'disabled' : ''}`}>
+                    <button className="page-link" onClick={() => setArchivedUserPage(archivedUserPage + 1)}>Next</button>
+                  </li>
+                </ul>
+              </nav>
+            )}
           </div>
 
           <div className="col-md-6 mb-4">
@@ -586,12 +680,29 @@ export default function AdminDashboard() {
                       <small className="text-muted">{appt.patient?.name} - {appt.requestedDate} at {formatTimeFriendly(appt.requestedTime)}</small>
                     </div>
                     <div className="d-flex gap-2">
-                        <button onClick={() => { setItemToProcess({ type: 'appointment', id: appt._id, action: 'restore' }); setShowConfirmModal(true); }} className="btn btn-sm btn-success">Restore</button>
-                        <button onClick={() => { setItemToProcess({ type: 'appointment', id: appt._id, action: 'delete' }); setShowConfirmModal(true); }} className="btn btn-sm btn-danger">Delete</button>
+                        <button onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'restore' })} className="btn btn-sm btn-success">Restore</button>
+                        <button onClick={() => openConfirm({ type: 'appointment', id: appt._id, action: 'delete' })} className="btn btn-sm btn-danger">Delete</button>
                     </div>
                   </div>
               ))}
             </div>
+            {archivedAppointmentPages > 1 && (
+              <nav className="mt-3">
+                <ul className="pagination pagination-sm justify-content-center">
+                  <li className={`page-item ${archivedAppointmentPage === 1 ? 'disabled' : ''}`}>
+                    <button className="page-link" onClick={() => setArchivedAppointmentPage(archivedAppointmentPage - 1)}>Previous</button>
+                  </li>
+                  {[...Array(archivedAppointmentPages)].map((_, i) => (
+                    <li key={i + 1} className={`page-item ${archivedAppointmentPage === i + 1 ? 'active' : ''}`}>
+                      <button className="page-link" onClick={() => setArchivedAppointmentPage(i + 1)}>{i + 1}</button>
+                    </li>
+                  ))}
+                  <li className={`page-item ${archivedAppointmentPage === archivedAppointmentPages ? 'disabled' : ''}`}>
+                    <button className="page-link" onClick={() => setArchivedAppointmentPage(archivedAppointmentPage + 1)}>Next</button>
+                  </li>
+                </ul>
+              </nav>
+            )}
           </div>
         </div>
       )}
@@ -603,63 +714,49 @@ export default function AdminDashboard() {
 
       {/* --- DYNAMIC ACTION MODAL --- */}
       {showConfirmModal && (
-        <>
-          <div className="modal-backdrop fade show" style={{ zIndex: 1040 }}></div>
-          <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content shadow">
-                <div className={`modal-header text-white ${itemToProcess.action === 'delete' ? 'bg-danger' : itemToProcess.action === 'archive' ? 'bg-warning text-dark' : 'bg-success'}`}>
-                  <h5 className="modal-title">
-                    {itemToProcess.action === 'delete' ? 'Confirm Permanent Deletion' : itemToProcess.action === 'archive' ? 'Confirm Archive' : 'Confirm Restore'}
-                  </h5>
-                  <button type="button" className="btn-close" onClick={() => setShowConfirmModal(false)}></button>
-                </div>
-                <div className="modal-body">
-                  <p className="mb-3">
-                    {itemToProcess.action === 'delete' 
-                      ? "WARNING: You are about to permanently delete this record from the database. This action cannot be undone. Are you sure?"
-                      : itemToProcess.action === 'archive'
-                      ? "Are you sure you want to move this record to the Archives? It will be hidden from the active lists."
-                      : "Are you sure you want to restore this record back to the active list?"}
-                  </p>
-                  
-                  {itemToProcess.action === 'archive' && (
-                    <div className="bg-light p-3 border rounded">
-                      {archiveError && <div className="alert alert-danger py-1 px-2 small">{archiveError}</div>}
-                      <div className="mb-2">
-                        <label className="form-label small fw-bold">Reason for Archiving <span className="text-danger">*</span></label>
-                        <textarea 
-                          className="form-control form-control-sm" 
-                          rows="2" 
-                          placeholder="Provide a clear reason..."
-                          value={archiveForm.reason}
-                          onChange={(e) => setArchiveForm({...archiveForm, reason: e.target.value})}
-                        ></textarea>
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Admin Contact (Email or Number) <span className="text-danger">*</span></label>
-                        <input 
-                          type="text" 
-                          className="form-control form-control-sm" 
-                          placeholder="e.g. admin@dentalink.com or 09123456789"
-                          value={archiveForm.contact}
-                          onChange={(e) => setArchiveForm({...archiveForm, contact: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="modal-footer bg-light">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)}>Cancel</button>
-                  <button type="button" className={`btn px-4 ${itemToProcess.action === 'delete' ? 'btn-danger' : itemToProcess.action === 'archive' ? 'btn-warning' : 'btn-success'}`} onClick={executeModalAction}>
-                    {itemToProcess.action === 'delete' ? 'Yes, Delete' : itemToProcess.action === 'archive' ? 'Yes, Archive' : 'Yes, Restore'}
-                  </button>
-                </div>
+        <ConfirmModal
+          title={itemToProcess.action === 'delete' ? 'Confirm Permanent Deletion' : itemToProcess.action === 'archive' ? 'Confirm Archive' : 'Confirm Restore'}
+          variant={itemToProcess.action === 'delete' ? 'danger' : itemToProcess.action === 'archive' ? 'warning' : 'success'}
+          confirmLabel={itemToProcess.action === 'delete' ? 'Delete permanently' : itemToProcess.action === 'archive' ? 'Archive' : 'Restore'}
+          requireText={itemToProcess.action === 'delete' ? 'DELETE' : undefined}
+          busy={modalBusy}
+          error={modalError}
+          onConfirm={executeModalAction}
+          onCancel={() => setShowConfirmModal(false)}
+        >
+          <p className="mb-3">
+            {itemToProcess.action === 'delete'
+              ? 'This permanently deletes the archived record and cannot be undone.'
+              : itemToProcess.action === 'archive'
+                ? 'This moves the record to the archives and hides it from active lists.'
+                : 'This restores the record to the active list.'}
+          </p>
+
+          {itemToProcess.action === 'archive' && (
+            <div className="bg-light p-3 border rounded">
+              <div className="mb-2">
+                <label className="form-label small fw-bold">Reason for Archiving <span className="text-danger">*</span></label>
+                <textarea
+                  className="form-control form-control-sm"
+                  rows="2"
+                  placeholder="Provide a clear reason..."
+                  value={archiveForm.reason}
+                  onChange={(e) => setArchiveForm({...archiveForm, reason: e.target.value})}
+                ></textarea>
+              </div>
+              <div>
+                <label className="form-label small fw-bold">Admin Contact (Email or Number) <span className="text-danger">*</span></label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  placeholder="e.g. admin@dentalink.com or 09123456789"
+                  value={archiveForm.contact}
+                  onChange={(e) => setArchiveForm({...archiveForm, contact: e.target.value})}
+                />
               </div>
             </div>
-          </div>
-        </>
+          )}
+        </ConfirmModal>
       )}
 
       {/* --- SCHEDULE CONFLICT MODAL --- */}

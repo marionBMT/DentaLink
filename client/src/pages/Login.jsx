@@ -21,7 +21,12 @@ export default function Login() {
       const res = await api.post("/auth/login", { identifier, password });
       if (res.data.requireOtp) {
         setShowOtp(true);
-        setOtpMessage("A 6-digit code has been sent to your email.");
+        if (res.data.developmentOtp) {
+          setOtpCode(res.data.developmentOtp);
+          setOtpMessage(`Local development code: ${res.data.developmentOtp}`);
+        } else {
+          setOtpMessage("A 6-digit code has been sent to your email.");
+        }
       }
     } catch (err) {
       // 429 + requireOtp: a code was sent seconds ago and is still valid

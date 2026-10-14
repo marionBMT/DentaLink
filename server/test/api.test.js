@@ -8,6 +8,7 @@ const assert = require("node:assert/strict");
 const jwt = require("jsonwebtoken");
 const app = require("../app");
 const { isDocx } = require("../config/cloudinary");
+const { isDevelopmentOtpEnabled } = require("../utils/developmentOtp");
 
 let server;
 let base;
@@ -157,4 +158,17 @@ test("legacy DOCX detection rejects a generic ZIP package", () => {
   );
   assert.equal(isDocx(zip), false);
   assert.equal(isDocx(docx), true);
+});
+
+test("development OTP exposure requires an explicit non-production switch", () => {
+  assert.equal(isDevelopmentOtpEnabled({}), false);
+  assert.equal(isDevelopmentOtpEnabled({ DEV_EXPOSE_OTP: "false" }), false);
+  assert.equal(
+    isDevelopmentOtpEnabled({ DEV_EXPOSE_OTP: "true", NODE_ENV: "development" }),
+    true,
+  );
+  assert.equal(
+    isDevelopmentOtpEnabled({ DEV_EXPOSE_OTP: "true", NODE_ENV: "production" }),
+    false,
+  );
 });

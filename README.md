@@ -157,6 +157,7 @@ Vite serves the client at `http://localhost:5173` by default. If `VITE_API_URL` 
 | `NODE_ENV` | Production | Use `production` to hide internal error details. |
 | `API_RATE_LIMIT` | No | General API requests per 15 minutes; defaults to `600`. |
 | `AUTH_RATE_LIMIT` | No | Authentication requests per 15 minutes; defaults to `30`. |
+| `DEV_EXPOSE_OTP` | Local development only | Set to `true` to show OTPs in the local UI instead of sending email. Production startup rejects this setting. |
 | `SEED_ADMIN_EMAIL` | Seed only | Initial admin email. |
 | `SEED_ADMIN_USERNAME` | Seed only | Initial admin username. |
 | `SEED_ADMIN_NAME` | Seed only | Initial admin display name. |

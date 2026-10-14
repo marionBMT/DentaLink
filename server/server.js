@@ -20,6 +20,13 @@ if (missing.length) {
   );
   process.exit(1);
 }
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.DEV_EXPOSE_OTP === "true"
+) {
+  console.error("DEV_EXPOSE_OTP must never be enabled in production.");
+  process.exit(1);
+}
 if (process.env.JWT_SECRET.length < 32) {
   const message = "JWT_SECRET must contain at least 32 characters.";
   if (process.env.NODE_ENV === "production") {

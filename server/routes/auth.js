@@ -25,6 +25,7 @@ const {
   LOGIN_LOCK_MS,
 } = require("../utils/constants");
 const audit = require("../utils/audit");
+const { isDevelopmentOtpEnabled } = require("../utils/developmentOtp");
 
 // Compared against when the account does not exist so that response time does
 // not reveal whether a username/email is registered.
@@ -205,25 +206,30 @@ router.post("/login", v.login, validate, async (req, res) => {
     });
   }
 
-  try {
-    await sendMail({
-      to: user.email,
-      subject: "DentaLink - Your Login Security Code",
-      text: `Your 6-digit login code is: ${code}\n\nThis code will expire in 10 minutes.\nIf you did not try to log in, please change your password.`,
-    });
-  } catch (err) {
-    console.error("OTP email failed:", err.message);
-    clearOtp(user);
-    await user.save();
-    return res.status(502).json({
-      message: "Could not send the verification email. Please try again.",
-    });
+  if (!isDevelopmentOtpEnabled()) {
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "DentaLink - Your Login Security Code",
+        text: `Your 6-digit login code is: ${code}\n\nThis code will expire in 10 minutes.\nIf you did not try to log in, please change your password.`,
+      });
+    } catch (err) {
+      console.error("OTP email failed:", err.message);
+      clearOtp(user);
+      await user.save();
+      return res.status(502).json({
+        message: "Could not send the verification email. Please try again.",
+      });
+    }
   }
 
   res.json({
-    message: "OTP sent to email",
+    message: isDevelopmentOtpEnabled()
+      ? "Development OTP generated locally."
+      : "OTP sent to email",
     requireOtp: true,
     email: user.email,
+    ...(isDevelopmentOtpEnabled() ? { developmentOtp: code } : {}),
   });
 });
 
@@ -313,6 +319,7 @@ router.post(
   validate,
   async (req, res) => {
     const { email } = req.body;
+    let developmentOtp;
     const user = await User.findOne({ email }).select(
       "+otpExpires +otpIssueCount +otpWindowStart",
     );
@@ -320,11 +327,15 @@ router.post(
     if (user && !user.isArchived && !inResendCooldown(user)) {
       try {
         const code = await issueOtp(user, "reset");
-        await sendMailSafe({
-          to: user.email,
-          subject: "DentaLink - Password Reset OTP",
-          text: `Your 6-digit password reset code is: ${code}\n\nThis code will expire in 10 minutes.\nIf you did not request this, you can ignore this email.`,
-        });
+        if (isDevelopmentOtpEnabled()) {
+          developmentOtp = code;
+        } else {
+          await sendMailSafe({
+            to: user.email,
+            subject: "DentaLink - Password Reset OTP",
+            text: `Your 6-digit password reset code is: ${code}\n\nThis code will expire in 10 minutes.\nIf you did not request this, you can ignore this email.`,
+          });
+        }
       } catch (err) {
         if (err.code !== "OTP_ISSUE_LIMIT") throw err;
         await audit(req, "auth.otp_issue_blocked", {
@@ -340,6 +351,7 @@ router.post(
     res.json({
       message:
         "If that email is registered, a password reset code has been sent.",
+      ...(developmentOtp ? { developmentOtp } : {}),
     });
   },
 );

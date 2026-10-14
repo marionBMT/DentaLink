@@ -26,7 +26,12 @@ export default function ForgotPassword() {
         email: email.trim(),
       });
       // The server answers identically for registered and unknown emails
-      setInfo(res.data.message);
+      setInfo(
+        res.data.developmentOtp
+          ? `Local development code: ${res.data.developmentOtp}`
+          : res.data.message,
+      );
+      if (res.data.developmentOtp) setOtp(res.data.developmentOtp);
       setStep(2);
     } catch (err) {
       setError(errorMessage(err, "Could not send the code"));

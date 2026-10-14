@@ -2,11 +2,12 @@ const nodemailer = require("nodemailer");
 
 // One shared transporter instead of one copy per route file.
 const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
+    host: 'smtp-relay.brevo.com',
+    port: 2525,
+    auth: {
+        user: process.env.BREVO_USER,
+        pass: process.env.BREVO_PASS
+    }
 });
 
 // Awaitable: use when the email is essential (e.g. OTP codes).
